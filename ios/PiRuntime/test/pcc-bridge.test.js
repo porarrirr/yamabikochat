@@ -74,7 +74,7 @@ test('authenticated PCC bridge resolves and streams through the bundled Pi agent
   assert.equal(completion.response.text, 'Hello from PCC');
   assert.equal(completion.response.usage.cacheCreationInputTokens, null);
   assert.equal(completion.response.piExecution.state.lastStopReason, 'unknown');
-  assert.equal(completion.response.piExecution.version, 3);
+  assert.equal(completion.response.piExecution.version, 4);
   assert.equal(completion.response.piExecution.state.messages, undefined);
   assert.equal(completion.response.piExecution.providerTranscript, undefined);
   assert.ok(completion.response.piExecution.providerRequests.every((entry) =>

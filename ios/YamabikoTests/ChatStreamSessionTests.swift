@@ -329,6 +329,7 @@ final class ChatStreamSessionTests: XCTestCase {
         let execution: JSONValue = .object([
             "format": .string("yamabiko.pi-agent-execution"),
             "providerTranscript": transcriptValue,
+            "version": .number(4),
             "failure": .object(["message": .string("provider failed")])
         ])
 
@@ -449,6 +450,7 @@ final class ChatStreamSessionTests: XCTestCase {
         )
         let execution: JSONValue = .object([
             "format": .string("yamabiko.pi-agent-execution"),
+            "version": .number(4),
             "state": .object(["messages": .array([])])
         ])
         let stream = AsyncThrowingStream<ProviderStreamEvent, Error> { continuation in

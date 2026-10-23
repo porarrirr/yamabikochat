@@ -22,6 +22,7 @@ struct CameraPicker: View {
     let onImageCaptured: (UIImage) -> Void
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.appAccent) private var appAccent
     @State private var accessState = CameraAccessState(
         authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video)
     )
@@ -65,7 +66,7 @@ struct CameraPicker: View {
             VStack(spacing: 16) {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(Color.chatAccent)
+                    .foregroundStyle(appAccent.color)
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(Color.chatComposerText)

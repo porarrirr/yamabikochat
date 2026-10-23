@@ -7,7 +7,7 @@ Development notes and design QA evidence are indexed in [docs/README.md](docs/RE
 ## Requirements
 - macOS with Xcode 27.0 (see `app-store-build.env`)
 - XcodeGen (`brew install xcodegen`)
-- Node.js 24
+- Node.js 24.22.1 or a newer security-patched 24.x release
 
 ## Bootstrap
 ```bash
@@ -16,21 +16,29 @@ cd ios
 open YamabikoChat.xcodeproj
 ```
 
-Bootstrap reuses npm dependencies, Pi bundles, and extracted Python packages
-when their inputs and output contents match. Wheel checksums and the active SDK
-are still validated. These caches live under the ignored `Vendor/` directory;
-deleting `Vendor/*cache.json` and `Vendor/PythonSitePackages/.*-cache.json`
-forces preparation on the next bootstrap.
+Bootstrap reuses npm dependencies and Pi bundles when their inputs and output
+contents match. Python uses a pinned offline Pyodide WebAssembly distribution;
+its archive and scientific wheels are verified on every bootstrap. Downloads
+are cached under the ignored `Vendor/PyodideCache/` and `Vendor/Pyodide/` directories.
 
-The Python build phase checks input and product hashes on every build, then
-reuses unchanged packaging. Debug builds reuse individual file hashes when
-device, inode, size, permissions, nanosecond modification time and change time
-match; file additions, deletions and same-size edits with restored modification
-times still invalidate the cache. Release builds always read all file contents.
-SDK, architecture, deployment target, and signing
-settings participate in the cache key. Its stamp lives in Xcode's target
-temporary directory, so a clean build repackages Python. Release builds reuse
-existing framework dSYMs only when their UUIDs match the binaries.
+NodeMobile is downloaded from the [YamabikoChat iOS distribution fork](https://github.com/porarrirr/nodejs-mobile).
+`node-mobile-release.json` pins the release URL and archive SHA-256. Bootstrap
+verifies the archive, both arm64 slices' Node version, and the composite license
+before installing it. A content-based cache checks the installed framework on
+every bootstrap; old frameworks and edited or missing files are replaced.
+Download or validation failures stop bootstrap and preserve the previous
+framework. Updating this runtime requires a new tested fork release, its checksum
+in the manifest, and the matching `third_party/nodejs-mobile/LICENSE`.
+
+Python runs in a Worker inside an ephemeral WebKit WebContent process. NumPy,
+Matplotlib, Pillow, and Noto fonts are bundled and work offline. No native CPython
+framework is linked. Python receives bounded workspace copies and has no native
+filesystem, Keychain, or network access. Timeout/cancellation destroys the worker;
+committed workspace files survive and the next cell starts a fresh namespace.
+See [the security design](docs/python-security.md) for the broker, CSP, memory cap,
+credential transport policy, and regression-test boundaries.
+When updating an existing native-Python build, run `xcodebuild clean` once to remove
+extension frameworks and Python resources previously generated inside the app bundle.
 
 Local builds and archives do not enforce the App Store SDK ceiling. The IPA
 and TestFlight workflows check the finished app and embedded binaries with
@@ -88,8 +96,7 @@ All three iOS workflows use GitHub's `xcode-27` runner image with Xcode 27.0
 and the iOS 27.0 SDK, matching `app-store-build.env`. The `macos-26` image
 only contains Xcode 26 and cannot build this project. The `xcode-27` image
 is currently a public preview; see the [official image announcement](https://github.com/actions/runner-images/issues/14404).
-Python wheel cache keys include the runner architecture to avoid reusing
-incompatible simulator wheels across Intel and Apple Silicon runners.
+The same WebAssembly Python assets are used for devices and simulators.
 
 ## Siri / Apple Intelligence
 

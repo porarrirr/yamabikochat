@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { secureEndpoint } from "./credential-security.js";
 import { createProvider } from "@earendil-works/pi-ai";
 import { stream as completionsStream, streamSimple as completionsSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { stream as responsesStream, streamSimple as responsesSimple } from "@earendil-works/pi-ai/api/openai-responses";
@@ -23,7 +24,7 @@ export function customProviderResolution(config, models) {
   if (!custom || !apis[custom.protocol]) return failure("custom_protocol_required");
   let url;
   try { url = new URL(custom.baseUrl); } catch { return failure("custom_base_url_invalid"); }
-  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return failure("custom_base_url_invalid");
+  if (!secureEndpoint(url) || url.search || url.hash) return failure("custom_base_url_invalid");
   if (!custom.modelId?.trim() || custom.modelId !== config.model) return failure("custom_model_mismatch");
   if (![custom.contextWindow, custom.maxTokens].every((v) => Number.isSafeInteger(v) && v > 0) || custom.maxTokens > custom.contextWindow) return failure("custom_token_limits_invalid");
   if (typeof custom.reasoning !== "boolean" || typeof custom.toolCall !== "boolean" || typeof custom.vision !== "boolean") return failure("custom_capabilities_required");

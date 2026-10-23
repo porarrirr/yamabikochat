@@ -101,6 +101,7 @@ enum ChatComposerSynchronizationPolicy {
 
 struct ChatComposerTextView: UIViewRepresentable {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.appAccent) private var appAccent
     @Binding var text: String
     @Binding var selectedText: String?
     @Binding var isFocused: Bool
@@ -173,6 +174,7 @@ struct ChatComposerTextView: UIViewRepresentable {
     }
 
     private func configure(_ container: ComposerContainerView, context: Context, placeCursorAtEnd: Bool) {
+        container.applyAccent(appAccent)
         container.setSelectedText(selectedText)
         container.textView.placeholderLabel.text = placeholder
         let suffix = ChatComposerSelectionPolicy.editableSuffix(in: text, selectedText: selectedText)
@@ -303,7 +305,6 @@ struct ChatComposerTextView: UIViewRepresentable {
             backgroundColor = .clear
             font = .systemFont(ofSize: 16)
             textColor = .label
-            tintColor = UIColor(Color.chatAccent)
             textContainerInset = .zero
             self.textContainer.lineFragmentPadding = 0
             isScrollEnabled = true
@@ -345,6 +346,7 @@ struct ChatComposerTextView: UIViewRepresentable {
         private let selectionContainer = UIView()
         private var selectedText: String?
         private var appliedExclusionBounds: [CGRect] = []
+        private var appliedAccent: AppAccentTheme?
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -359,11 +361,9 @@ struct ChatComposerTextView: UIViewRepresentable {
 
             let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
             iconView.image = UIImage(systemName: "bubble.left", withConfiguration: configuration)
-            iconView.tintColor = UIColor(Color.chatAccent)
             iconView.contentMode = .scaleAspectFit
 
             selectionLabel.font = .systemFont(ofSize: 16)
-            selectionLabel.textColor = UIColor(Color.chatAccent)
             selectionLabel.numberOfLines = 1
             selectionLabel.lineBreakMode = .byTruncatingTail
 
@@ -387,6 +387,15 @@ struct ChatComposerTextView: UIViewRepresentable {
                 .replacingOccurrences(of: "\n", with: " ")
                 .replacingOccurrences(of: "\r", with: " ")
             setNeedsLayout()
+        }
+
+        func applyAccent(_ accent: AppAccentTheme) {
+            guard appliedAccent != accent else { return }
+            appliedAccent = accent
+            let accentColor = UIColor(accent.color)
+            textView.tintColor = accentColor
+            iconView.tintColor = accentColor
+            selectionLabel.textColor = accentColor
         }
 
         func selectionWidth(for selectedText: String) -> CGFloat {
@@ -496,6 +505,7 @@ struct ChatScreen: View {
     var onNavigateToConversation: ((Int64) -> Void)? = nil
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.appAccent) private var appAccent
     @State private var showFileImporter = false
     @State private var showPhotoPicker = false
     @State private var showRecentPhotoSheet = false
@@ -841,7 +851,7 @@ struct ChatScreen: View {
                         .truncationMode(.tail)
                 }
                 .font(.caption)
-                .foregroundStyle(Color.chatAccent)
+                .foregroundStyle(appAccent.color)
                 .padding(.horizontal, 10)
             }
 
@@ -883,7 +893,7 @@ struct ChatScreen: View {
                             HStack(spacing: 12) {
                                 Image(systemName: "wand.and.stars")
                                     .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(Color.chatAccent)
+                                    .foregroundStyle(appAccent.color)
                                     .frame(width: 24)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(skill.name)
@@ -1196,17 +1206,17 @@ struct ChatScreen: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(viewModel.isSpeechRecording ? Color.red : Color.chatOrange)
+                    .fill(viewModel.isSpeechRecording ? Color.red : appAccent.color)
                     .frame(width: 44, height: 44)
 
                 if viewModel.isSending {
                     ProgressView()
-                        .tint(.white)
+                        .tint(viewModel.isSpeechRecording ? Color.white : appAccent.onAccentColor)
                         .controlSize(.small)
                 } else {
                     Image(systemName: viewModel.isSpeechRecording ? "waveform" : "mic.fill")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(viewModel.isSpeechRecording ? Color.white : appAccent.onAccentColor)
                         .symbolEffect(.pulse, isActive: viewModel.isSpeechRecording)
                 }
             }
@@ -1252,6 +1262,7 @@ struct ChatScreen: View {
     }
 
     private struct ContextUsageMeter: View {
+        @Environment(\.appAccent) private var appAccent
         let usage: ContextUsage
         let isCompacting: Bool
         let canCompact: Bool
@@ -1268,7 +1279,7 @@ struct ChatScreen: View {
                             .stroke(Color.chatComposerIcon.opacity(0.2), lineWidth: 2)
                         Circle()
                             .trim(from: 0, to: usage.fraction)
-                            .stroke(Color.chatOrange, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .stroke(appAccent.color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                     }
                     .frame(width: 14, height: 14)
@@ -2167,8 +2178,6 @@ extension Color {
     static let chatInputChipBackground = Color(uiColor: .amoledTertiarySystemFill)
     static let chatUserBubble = Color(uiColor: .amoledSecondarySystemFill)
     static let chatUserText = Color(uiColor: .label)
-    static let chatAccent = Color(uiColor: .systemBlue)
-    static let chatOrange = Color(red: 235 / 255, green: 94 / 255, blue: 40 / 255)
     static let chatDualCard = Color(uiColor: .amoledSecondarySystemBackground)
     static let chatComposerText = Color(uiColor: .label)
     static let chatComposerIcon = Color(uiColor: .amoledSecondaryLabel)

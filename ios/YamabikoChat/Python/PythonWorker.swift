@@ -51,7 +51,7 @@ enum PythonToolError: LocalizedError, Equatable {
         case .invalidResponse:
             return "Embedded Python returned an invalid result envelope."
         case .poisoned:
-            return "Embedded Python did not stop inside a native extension. Restart YamabikoChat before using python_execute again."
+            return "The Python execution queue is unavailable."
         case let .attachmentMissing(path):
             return "A Python attachment no longer exists: \(path)"
         case let .attachmentIdentityCollision(identifier):
@@ -62,86 +62,6 @@ enum PythonToolError: LocalizedError, Equatable {
     }
 }
 
-private final class PythonExecutionGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<String, Never>?
-    private var finished = false
-    private var interruptStarted = false
-
-    init(continuation: CheckedContinuation<String, Never>) {
-        self.continuation = continuation
-    }
-
-    var isFinished: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return finished
-    }
-
-    func beginInterrupt() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !finished, !interruptStarted else { return false }
-        interruptStarted = true
-        return true
-    }
-
-    func finish(_ value: String) {
-        lock.lock()
-        guard !finished else {
-            lock.unlock()
-            return
-        }
-        finished = true
-        let pending = continuation
-        continuation = nil
-        lock.unlock()
-        pending?.resume(returning: value)
-    }
-}
-
-private final class PythonCancellationFlag: @unchecked Sendable {
-    private let lock = NSLock()
-    private var cancelled = false
-
-    var isCancelled: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return cancelled
-    }
-
-    func cancel() {
-        lock.lock()
-        cancelled = true
-        lock.unlock()
-    }
-}
-
-private final class PythonRuntimeBridgeStore: @unchecked Sendable {
-    static let shared = PythonRuntimeBridgeStore()
-
-    private let lock = NSLock()
-    private var bridge: PythonRuntimeBridge?
-
-    func resolve(
-        pythonHome: String,
-        harnessPath: String,
-        sitePackagesPath: String?
-    ) -> PythonRuntimeBridge {
-        lock.lock()
-        defer { lock.unlock() }
-        if let bridge { return bridge }
-        let runtime = PythonRuntimeBridge(
-            pythonHome: pythonHome,
-            harnessPath: harnessPath,
-            sitePackagesPath: sitePackagesPath
-        )
-        bridge = runtime
-        return runtime
-    }
-}
-
-// Every worker shares the one native interpreter, including session resets.
 actor PythonJobQueue {
     static let shared = PythonJobQueue()
     private var active: UUID?
@@ -194,21 +114,22 @@ actor PythonJobQueue {
 
 actor PythonWorker {
     static let shared = PythonWorker()
-
     private let sessions: PythonSessionStore
     private let timeoutSeconds: TimeInterval
-    private let memoryLimitBytes: UInt64
-    private let maximumWorkspaceFiles: Int
-    private let maximumWorkspaceBytes: Int64
-    private let maximumFileBytes: Int64
-    private let maximumPathDepth: Int
-    private var bridge: PythonRuntimeBridge?
-    private var poisoned = false
+    private let files: PythonSandboxFiles
+    private let maximumRetainedSessions: Int
+    private var sandboxes: [String: PythonWebSandbox] = [:]
+    private var recentSessions: [String] = []
+
+    deinit {
+        let remaining = Array(sandboxes.values)
+        Task { @MainActor in remaining.forEach { $0.dispose() } }
+    }
 
     init(
         sessions: PythonSessionStore = .shared,
         timeoutSeconds: TimeInterval = 120,
-        memoryLimitBytes: UInt64 = 1_200_000_000,
+        maximumRetainedSessions: Int = 2,
         maximumWorkspaceFiles: Int = 1_024,
         maximumWorkspaceBytes: Int64 = 100 * 1_024 * 1_024,
         maximumFileBytes: Int64 = 25 * 1_024 * 1_024,
@@ -216,255 +137,88 @@ actor PythonWorker {
     ) {
         self.sessions = sessions
         self.timeoutSeconds = timeoutSeconds
-        self.memoryLimitBytes = memoryLimitBytes
-        self.maximumWorkspaceFiles = maximumWorkspaceFiles
-        self.maximumWorkspaceBytes = maximumWorkspaceBytes
-        self.maximumFileBytes = maximumFileBytes
-        self.maximumPathDepth = maximumPathDepth
+        self.maximumRetainedSessions = max(1, maximumRetainedSessions)
+        // The bundled WASM declares a hard 512 MiB maximum, enforced by WebKit.
+        self.files = PythonSandboxFiles(maximumFiles: maximumWorkspaceFiles,
+            maximumBytes: maximumWorkspaceBytes, maximumFileBytes: maximumFileBytes,
+            maximumDepth: maximumPathDepth)
     }
 
-    func execute(
-        sessionID: String,
-        code: String,
-        reset: Bool,
-        attachmentPaths: [String]
-    ) async throws -> PythonExecutionResponse {
-        let jobID = UUID()
-        try await PythonJobQueue.shared.acquire(jobID)
+    func execute(sessionID: String, code: String, reset: Bool, attachmentPaths: [String]) async throws -> PythonExecutionResponse {
+        let job = UUID()
+        try await PythonJobQueue.shared.acquire(job)
         do {
             let result = try await executeAcquired(sessionID: sessionID, code: code, reset: reset, attachmentPaths: attachmentPaths)
-            await PythonJobQueue.shared.release(jobID)
+            await PythonJobQueue.shared.release(job)
             return result
         } catch {
-            await PythonJobQueue.shared.release(jobID)
+            await PythonJobQueue.shared.release(job)
             throw error
         }
     }
 
     private func executeAcquired(sessionID: String, code: String, reset: Bool, attachmentPaths: [String]) async throws -> PythonExecutionResponse {
-        guard !poisoned else { throw PythonToolError.poisoned }
-        let bridge = try runtimeBridge()
+        try Task.checkCancellation()
         let paths = try sessions.prepare(sessionID: sessionID)
         _ = try sessions.stageAttachments(attachmentPaths, in: paths)
-        if let violation = workspaceLimitViolation(in: paths) {
-            throw PythonToolError.resourceLimitExceeded(violation)
-        }
-        let readRoots = [
-            Bundle.main.resourceURL?.appendingPathComponent("python").path,
-            Bundle.main.resourceURL?.path,
-        ].compactMap { $0 }
-        let options: [String: Any] = [
-            "workspace": paths.workspace.path,
-            "outputs": paths.outputs.path,
-            "read_roots": readRoots,
-            "reset": reset,
-        ]
-        let data = try JSONSerialization.data(withJSONObject: options)
-        let optionsJSON = String(decoding: data, as: UTF8.self)
-        let resultJSON = await executeWithWatchdog(
-            bridge: bridge,
-            sessionID: sessionID,
-            code: code,
-            optionsJSON: optionsJSON,
-            paths: paths
-        )
-        do {
-            try Task.checkCancellation()
-        } catch {
-            await resetAcquired(sessionID: sessionID)
-            throw error
-        }
-        if let violation = workspaceLimitViolation(in: paths) {
-            let response = Self.resourceLimitResponse(violation)
-            await resetAcquired(sessionID: sessionID)
-            return response
-        }
-        guard let resultData = resultJSON.data(using: .utf8),
-              let result = try? JSONDecoder().decode(PythonExecutionResponse.self, from: resultData)
+        let baseline = try files.read(workspace: paths.workspace)
+        // A reset discards the entire worker, including mutated JS/Python modules.
+        if reset { await discard(sessionID) }
+        let sandbox: PythonWebSandbox
+        if let existing = sandboxes[sessionID] { sandbox = existing }
         else {
+            while sandboxes.count >= maximumRetainedSessions, let oldest = recentSessions.first {
+                await discard(oldest)
+            }
+            sandbox = await PythonWebSandbox()
+            sandboxes[sessionID] = sandbox
+        }
+        recentSessions.removeAll { $0 == sessionID }
+        recentSessions.append(sessionID)
+        do {
+            let envelope = try await sandbox.execute(code: code, reset: reset, files: baseline, timeout: timeoutSeconds)
+            try Task.checkCancellation()
+            let validated = try files.validate(envelope.files)
+            for artifact in envelope.result.artifacts {
+                guard ["workspace", "outputs"].contains(artifact.root ?? ""),
+                      !artifact.relpath.hasPrefix("/"), !artifact.relpath.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }),
+                      !artifact.relpath.contains("\\"), !artifact.relpath.contains("\0") else { throw PythonToolError.invalidArtifactPath }
+                let path = artifact.root == "outputs" ? "outputs/" + artifact.relpath : artifact.relpath
+                guard let value = validated[path], let data = value, Int64(data.count) == artifact.size else { throw PythonToolError.invalidArtifactPath }
+            }
+            try files.commit(envelope.files, workspace: paths.workspace, baseline: baseline)
+            return envelope.result
+        } catch is PythonSandboxTimeout {
+            await discard(sessionID)
+            return Self.failure("TimeoutError", "Python execution exceeded its time limit. Its namespace was reset; workspace files were preserved.")
+        } catch is CancellationError {
+            await discard(sessionID)
+            throw CancellationError()
+        } catch let error as PythonToolError {
+            await discard(sessionID)
+            if case let .resourceLimitExceeded(message) = error { return Self.failure("ResourceLimitExceeded", message) }
+            throw error
+        } catch {
+            await discard(sessionID)
+            DiagnosticsLogger.log("Isolated Python execution failed", category: .network)
             throw PythonToolError.invalidResponse
         }
-        return result
     }
 
     func resetSession(sessionID: String) async {
-        let jobID = UUID()
-        do { try await PythonJobQueue.shared.acquire(jobID) } catch { return }
-        await resetAcquired(sessionID: sessionID)
-        await PythonJobQueue.shared.release(jobID)
+        let job = UUID()
+        do { try await PythonJobQueue.shared.acquire(job) } catch { return }
+        await discard(sessionID)
+        await PythonJobQueue.shared.release(job)
     }
 
-    private func resetAcquired(sessionID: String) async {
-        guard !poisoned, let bridge else { return }
-        let error = await withCheckedContinuation { continuation in
-            bridge.resetSession(sessionID) { errorMessage in
-                continuation.resume(returning: errorMessage)
-            }
-        }
-        if let error {
-            DiagnosticsLogger.log(
-                "Python namespace reset failed",
-                category: .network,
-                metadata: ["sessionID": sessionID],
-                error: ProviderClientError.parseFailure(error)
-            )
-        }
+    private func discard(_ sessionID: String) async {
+        recentSessions.removeAll { $0 == sessionID }
+        if let sandbox = sandboxes.removeValue(forKey: sessionID) { await sandbox.dispose() }
     }
 
-    private func runtimeBridge() throws -> PythonRuntimeBridge {
-        if let bridge { return bridge }
-        guard let resourceRoot = Bundle.main.resourceURL,
-              let harness = Bundle.main.url(forResource: "yamabiko_runtime", withExtension: "py")
-        else { throw PythonToolError.runtimeResourcesMissing }
-        let pythonHome = resourceRoot.appendingPathComponent("python", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: pythonHome.path) else {
-            throw PythonToolError.runtimeResourcesMissing
-        }
-        let sitePackages = resourceRoot.appendingPathComponent("PythonSitePackages", isDirectory: true)
-        let runtime = PythonRuntimeBridgeStore.shared.resolve(
-            pythonHome: pythonHome.path,
-            harnessPath: harness.path,
-            sitePackagesPath: FileManager.default.fileExists(atPath: sitePackages.path) ? sitePackages.path : nil
-        )
-        bridge = runtime
-        return runtime
-    }
-
-    private func executeWithWatchdog(
-        bridge: PythonRuntimeBridge,
-        sessionID: String,
-        code: String,
-        optionsJSON: String,
-        paths: PythonSessionPaths
-    ) async -> String {
-        let configuredMemoryLimit = memoryLimitBytes
-        let configuredTimeout = timeoutSeconds
-        let cancellation = PythonCancellationFlag()
-        let executionID = UUID().uuidString
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                let gate = PythonExecutionGate(continuation: continuation)
-                bridge.executeSession(sessionID, executionID: executionID, code: code, optionsJSON: optionsJSON) { result in
-                    gate.finish(result)
-                }
-                Task { [weak self] in
-                    guard let self else { return }
-                    let started = ContinuousClock.now
-                    while !gate.isFinished {
-                        try? await Task.sleep(for: .milliseconds(250))
-                        guard !gate.isFinished else { return }
-                        if cancellation.isCancelled {
-                            await self.interrupt(
-                                bridge: bridge,
-                                gate: gate,
-                                executionID: executionID,
-                                exceptionName: "KeyboardInterrupt",
-                                errorType: "CancellationError",
-                                message: "Python execution was cancelled."
-                            )
-                            return
-                        }
-                        let footprint = bridge.physicalFootprintBytes()
-                        if footprint > configuredMemoryLimit {
-                            await self.interrupt(
-                                bridge: bridge,
-                                gate: gate,
-                                executionID: executionID,
-                                exceptionName: "MemoryError",
-                                errorType: "MemoryLimitExceeded",
-                                message: "Python exceeded the 1.2 GB process memory soft limit."
-                            )
-                            return
-                        }
-                        if let violation = await self.workspaceLimitViolation(in: paths) {
-                            await self.interrupt(
-                                bridge: bridge,
-                                gate: gate,
-                                executionID: executionID,
-                                exceptionName: "OSError",
-                                errorType: "ResourceLimitExceeded",
-                                message: violation
-                            )
-                            return
-                        }
-                        if started.duration(to: .now) >= .seconds(configuredTimeout) {
-                            await self.interrupt(
-                                bridge: bridge,
-                                gate: gate,
-                                executionID: executionID,
-                                exceptionName: "TimeoutError",
-                                errorType: "TimeoutError",
-                                message: "Python execution exceeded the 120 second limit."
-                            )
-                            return
-                        }
-                    }
-                }
-            }
-        } onCancel: {
-            cancellation.cancel()
-        }
-    }
-
-    private func workspaceLimitViolation(in paths: PythonSessionPaths) -> String? {
-        guard let usage = try? sessions.workspaceUsage(in: paths) else {
-            return "The Python workspace could not be inspected safely."
-        }
-        if usage.fileCount > maximumWorkspaceFiles {
-            return "Workspace file count exceeded \(maximumWorkspaceFiles)."
-        }
-        if usage.totalBytes > maximumWorkspaceBytes {
-            return "Workspace bytes exceeded \(maximumWorkspaceBytes)."
-        }
-        if usage.largestFileBytes > maximumFileBytes {
-            return "A file exceeded \(maximumFileBytes) bytes."
-        }
-        if usage.maximumDepth > maximumPathDepth {
-            return "Workspace path depth exceeded \(maximumPathDepth)."
-        }
-        return nil
-    }
-
-    private static func resourceLimitResponse(_ message: String) -> PythonExecutionResponse {
-        PythonExecutionResponse(
-            status: "error",
-            stdout: "",
-            stderr: "",
-            resultRepr: nil,
-            artifacts: [],
-            durationMs: 0,
-            error: PythonExecutionFailure(
-                type: "ResourceLimitExceeded",
-                message: message,
-                traceback: ""
-            )
-        )
-    }
-
-    private func interrupt(
-        bridge: PythonRuntimeBridge,
-        gate: PythonExecutionGate,
-        executionID: String,
-        exceptionName: String,
-        errorType: String,
-        message: String
-    ) async {
-        guard gate.beginInterrupt() else { return }
-        bridge.requestInterrupt(withExceptionName: exceptionName, executionID: executionID)
-        try? await Task.sleep(for: .seconds(5))
-        guard !gate.isFinished else { return }
-        poisoned = true
-        await PythonJobQueue.shared.poison()
-        gate.finish(Self.errorJSON(type: errorType, message: message + " The interpreter is now unavailable until app restart."))
-    }
-
-    private static func errorJSON(type: String, message: String) -> String {
-        let object: [String: Any] = [
-            "status": "error", "stdout": "", "stderr": "", "result_repr": NSNull(),
-            "artifacts": [], "duration_ms": 0,
-            "error": ["type": type, "message": message, "traceback": ""],
-        ]
-        let data = try? JSONSerialization.data(withJSONObject: object)
-        return data.map { String(decoding: $0, as: UTF8.self) } ?? #"{"status":"error"}"#
+    private static func failure(_ type: String, _ message: String) -> PythonExecutionResponse {
+        PythonExecutionResponse(status: "error", stdout: "", stderr: "", resultRepr: nil,
+            artifacts: [], durationMs: 0, error: PythonExecutionFailure(type: type, message: message, traceback: ""))
     }
 }

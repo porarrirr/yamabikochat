@@ -26,7 +26,7 @@ enum DiagnosticsLogSanitizer {
         )
         result = replacingRegex(
             in: result,
-            pattern: #"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|password)\s*[:=]\s*["']?[^"'\s,&]+"#,
+            pattern: #"(?i)["']?\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|authorization[_-]?token|client[_-]?secret|password|secret)["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,&}\]]+)"#,
             with: "$1=[REDACTED]"
         )
         result = redactSensitiveQueryItems(in: result)

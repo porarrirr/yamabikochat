@@ -273,6 +273,9 @@ enum ConversationExportService {
         var export = snapshot
         export.schemaVersion = 3
         export.piExecutions = []
+        for index in export.fusionTraces.indices {
+            export.fusionTraces[index].traceJSON = PiDiagnosticSanitizer.sanitizeEncoded(export.fusionTraces[index].traceJSON)
+        }
 
         for messageIndex in export.messages.indices {
             export.messages[messageIndex].toolActivity?.piExecution = nil
@@ -281,11 +284,14 @@ enum ConversationExportService {
             }
         }
         for dualIndex in export.dualMessages.indices {
+            export.dualMessages[dualIndex].message.modelAToolActivityJSON = export.dualMessages[dualIndex].message.modelAToolActivityJSON.map(PiDiagnosticSanitizer.sanitizeEncoded)
+            export.dualMessages[dualIndex].message.modelBToolActivityJSON = export.dualMessages[dualIndex].message.modelBToolActivityJSON.map(PiDiagnosticSanitizer.sanitizeEncoded)
             export.dualMessages[dualIndex].modelAToolActivity?.piExecution = nil
             export.dualMessages[dualIndex].modelBToolActivity?.piExecution = nil
         }
         for conversationIndex in export.autoConversations.indices {
             for messageIndex in export.autoConversations[conversationIndex].messages.indices {
+                export.autoConversations[conversationIndex].messages[messageIndex].message.piExecutionJSON = export.autoConversations[conversationIndex].messages[messageIndex].message.piExecutionJSON.map(PiDiagnosticSanitizer.sanitizeEncoded)
                 export.autoConversations[conversationIndex].messages[messageIndex].piExecution = nil
             }
         }
@@ -393,7 +399,7 @@ enum ConversationExportService {
             )
             let directoryURL = sessionsURL.appendingPathComponent(directoryName, isDirectory: true)
             try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            try encoder.encode(record.execution).write(
+            try encoder.encode(PiDiagnosticSanitizer.sanitize(record.execution)).write(
                 to: directoryURL.appendingPathComponent("execution.json"),
                 options: .atomic
             )

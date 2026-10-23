@@ -4,6 +4,7 @@ import UIKit
 
 struct RecentPhotoSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appAccent) private var appAccent
     @ObservedObject var library: RecentPhotoLibrary
     @Binding var selection: RecentPhotoSelection
     let isAdding: Bool
@@ -128,7 +129,7 @@ struct RecentPhotoSheet: View {
                         HStack(spacing: 6) {
                             if isAdding {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(appAccent.onAccentColor)
                                     .controlSize(.small)
                             }
                             Text(selection.count == 1
@@ -136,12 +137,12 @@ struct RecentPhotoSheet: View {
                                 : L10n.format("%d点の写真を追加する", selection.count))
                                 .font(.subheadline.weight(.bold))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(appAccent.onAccentColor)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
-                        .background(Color.chatAccent)
+                        .background(appAccent.color)
                         .clipShape(Capsule())
-                        .shadow(color: Color.chatAccent.opacity(0.4), radius: 6, x: 0, y: 3)
+                        .shadow(color: appAccent.color.opacity(0.4), radius: 6, x: 0, y: 3)
                     }
                     .buttonStyle(.plain)
                     .disabled(isAdding)
@@ -156,7 +157,7 @@ struct RecentPhotoSheet: View {
         VStack(spacing: 14) {
             Image(systemName: "photo.stack")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.chatAccent)
+                .foregroundStyle(appAccent.color)
 
             Text(L10n.text("写真へのアクセスを許可"))
                 .font(.headline)
@@ -270,6 +271,7 @@ private final class RecentPhotoMasonryLayoutCache: ObservableObject {
 
 private struct RecentPhotoMasonryCell: View {
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.appAccent) private var appAccent
     let item: RecentPhotoItem
     let width: CGFloat
     let selectionIndex: Int?
@@ -318,18 +320,18 @@ private struct RecentPhotoMasonryCell: View {
 
                 if selectionIndex != nil {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.chatAccent, lineWidth: 2.5)
+                        .stroke(appAccent.color, lineWidth: 2.5)
                 }
 
                 if let selectionIndex {
                     ZStack {
                         Circle()
-                            .fill(Color.chatAccent)
+                            .fill(appAccent.color)
                         Circle()
-                            .stroke(.white, lineWidth: 1.5)
+                            .stroke(appAccent.onAccentColor, lineWidth: 1.5)
                         Text("\(selectionIndex)")
                             .font(.system(size: 13, weight: .bold).monospacedDigit())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(appAccent.onAccentColor)
                     }
                     .frame(width: 24, height: 24)
                     .shadow(color: .black.opacity(0.25), radius: 2, x: 0, y: 1)

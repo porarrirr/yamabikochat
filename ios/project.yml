@@ -54,6 +54,18 @@ targets:
         buildPhase: resources
       - path: YamabikoChat/Python/Resources/yamabiko_runtime.py
         buildPhase: resources
+      - path: YamabikoChat/Python/Resources/python-sandbox.js
+        buildPhase: resources
+      - path: YamabikoChat/Python/Resources/python-worker.js
+        buildPhase: resources
+      - path: YamabikoChat/Python/Resources/Fonts
+        type: folder
+        buildPhase: resources
+      - path: Vendor/Pyodide
+        type: folder
+        buildPhase: resources
+        excludes:
+          - distribution.tgz
     resources:
       - path: YamabikoChat/App/Resources
         excludes:
@@ -71,7 +83,6 @@ targets:
       ENABLE_USER_SCRIPT_SANDBOXING: NO
       CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
       HEADER_SEARCH_PATHS:
-        - "$(BUILT_PRODUCTS_DIR)/Python.framework/Headers"
         - "$(SRCROOT)/YamabikoChat/Features/Tools/GenUI/NativeCEL/quickjs"
       EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     dependencies:
@@ -81,8 +92,6 @@ targets:
       - package: ZIPFoundation
       - package: Markdown
       - framework: Vendor/NodeMobile.xcframework
-        embed: true
-      - framework: Vendor/Python.xcframework
         embed: true
       - target: YamabikoShareExtension
         embed: true
@@ -103,6 +112,7 @@ targets:
           - $(SRCROOT)/../third_party/nodejs-mobile/LICENSE
           - $(SRCROOT)/../third_party/npm-licenses.md
           - $(SRCROOT)/../third_party/pi-subagents-LICENSE.txt
+          - $(SRCROOT)/../third_party/pyodide-LICENSE.txt
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notonastaliqurdu.txt
           - $(SRCROOT)/YamabikoChat/Python/Resources/Fonts/licenses/OFL-notosansarabic.txt
@@ -116,11 +126,8 @@ targets:
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NODEJS_LICENSE.txt
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/npm-licenses.md
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/PI_SUBAGENTS_LICENSE.txt
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/PYODIDE_LICENSE.txt
           - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/legal/NOTO_FONTS_LICENSES.txt
-    postCompileScripts:
-      - name: Process Python libraries
-        script: scripts/process-python-libraries.sh
-        basedOnDependencyAnalysis: false
   YamabikoShareExtension:
     type: app-extension
     platform: iOS

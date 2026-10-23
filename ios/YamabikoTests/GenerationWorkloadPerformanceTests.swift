@@ -157,7 +157,7 @@ final class GenerationWorkloadPerformanceTests: XCTestCase {
             try Data("value,amount\n\(index),42\n".utf8)
                 .write(to: paths.workspace.appendingPathComponent("input-\(index).csv"))
         }
-        let worker = PythonWorker(sessions: sessions, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: sessions)
         // Interpreter startup is measured by live tests, not repeated warm cells.
         let warmup = try await worker.execute(sessionID: "performance", code: "sum(range(1000))", reset: true, attachmentPaths: [])
         XCTAssertEqual(warmup.status, "ok", warmup.error?.traceback ?? "")

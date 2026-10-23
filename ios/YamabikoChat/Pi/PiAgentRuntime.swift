@@ -338,6 +338,7 @@ actor PiAgentRuntime {
     private var token: String?
     private var startupTask: Task<(URL, String), Error>?
     private var healthCheckFlight: HealthCheckFlight?
+    private var oauthSessions: [String: (Set<String>, URLSession)] = [:]
     #if DEBUG
     private var lastHealthyAt: Date?
     private var activeRunIDs: Set<String> = []
@@ -517,6 +518,7 @@ actor PiAgentRuntime {
     }
 
     func revokeChatGPT(credentialJSON: String) async throws {
+        cancelOAuthSessions(provider: "openai-chatgpt")
         let (endpoint, token) = try await startIfNeeded()
         let credential = try JSONDecoder().decode(JSONValue.self, from: Data(credentialJSON.utf8))
         var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/revoke"))
@@ -529,6 +531,24 @@ actor PiAgentRuntime {
             let error = (try? JSONDecoder().decode([String: String].self, from: data)["error"]) ?? "ChatGPT session revocation failed"
             throw ProviderClientError.parseFailure(error)
         }
+    }
+
+    func logoutOAuth(provider: PiOAuthProvider) async throws {
+        guard provider == .supergrok else { throw ProviderClientError.invalidResponse }
+        cancelOAuthSessions(provider: "xai-oauth")
+        guard endpoint != nil || startupTask != nil else { return }
+        let (endpoint, token) = try await startIfNeeded()
+        var request = URLRequest(url: endpoint.appendingPathComponent("v1/auth/logout"))
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(["provider": provider.rawValue])
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (_, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw ProviderClientError.invalidResponse }
+    }
+
+    private func cancelOAuthSessions(provider: String) {
+        for (_, entry) in oauthSessions where entry.0.contains(provider) { entry.1.invalidateAndCancel() }
     }
 
     func loginOAuth(
@@ -708,6 +728,7 @@ actor PiAgentRuntime {
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let session = URLSession(configuration: .ephemeral)
+        oauthSessions[runID] = (Set([configuration.provider] + (configuration.subagents?.models.compactMap { $0.configuration?.provider } ?? [])), session)
         DiagnosticsLogger.log(
             "Pi runtime bridge request starting",
             category: .network,
@@ -723,6 +744,7 @@ actor PiAgentRuntime {
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                defer { oauthSessions.removeValue(forKey: runID); session.invalidateAndCancel() }
                 #if DEBUG
                 self.registerActiveRun(runID)
                 defer {
@@ -934,7 +956,7 @@ actor PiAgentRuntime {
                             guard let execution = event.execution else {
                                 throw ProviderClientError.parseFailure("Pi emitted an invalid execution snapshot")
                             }
-                            continuation.yield(.executionSnapshot(execution))
+                            continuation.yield(.executionSnapshot(PiDiagnosticSanitizer.sanitize(execution)))
                         case "error":
                             let message = event.message ?? "Pi agent failed"
                             let error: ProviderClientError

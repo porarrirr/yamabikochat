@@ -173,7 +173,8 @@ struct RootView: View {
         }
         .amoledPresentation()
         .preferredColorScheme(resolvedColorScheme)
-        .tint(resolvedTintColor)
+        .tint(resolvedAccent.color)
+        .environment(\.appAccent, resolvedAccent)
         .overlay {
             if privacyCoverVisible {
                 ZStack {
@@ -202,12 +203,14 @@ struct RootView: View {
                 NavigationStack { conversationSidebar }
                     .environmentObject(container)
                     .environmentObject(appState)
-                    .tint(resolvedTintColor)
+                    .tint(resolvedAccent.color)
+                    .environment(\.appAccent, resolvedAccent)
             } detail: {
                 conversationDetail
                     .environmentObject(container)
                     .environmentObject(appState)
-                    .tint(resolvedTintColor)
+                    .tint(resolvedAccent.color)
+                    .environment(\.appAccent, resolvedAccent)
             }
             .ignoresSafeArea()
         } else {
@@ -280,25 +283,8 @@ struct RootView: View {
         return (try? container.chatRepository.conversation(id: id)?.isSecret) == true
     }
 
-    private var resolvedTintColor: Color {
-        switch themeColor.uppercased() {
-        case "BLUE":
-            return Color(uiColor: .systemBlue)
-        case "GREEN":
-            return Color(uiColor: .systemGreen)
-        case "YELLOW":
-            return Color(uiColor: .systemYellow)
-        case "PINK":
-            return Color(uiColor: .systemPink)
-        case "ORANGE":
-            return Color(uiColor: .systemOrange)
-        case "WHITE":
-            return Color(uiColor: .white)
-        case "BLACK":
-            return Color(uiColor: .black)
-        default:
-            return Color(uiColor: .systemIndigo)
-        }
+    private var resolvedAccent: AppAccentTheme {
+        AppAccentTheme(themeColor: themeColor)
     }
 
     private func applyAppearance(_ settings: AppSettings) {

@@ -35,7 +35,16 @@ enum AppDatabase {
         }
 
         let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
-        try migrator.migrate(queue)
+        let databaseMigrator = migrator
+        let appliedMigrations = try queue.read { try databaseMigrator.appliedMigrations($0) }
+        if !appliedMigrations.contains("v34_redact_persisted_diagnostic_credentials") {
+            // Remove legacy diagnostic copies only for the app's actual database,
+            // never while migrating an unrelated in-memory or imported database.
+            DiagnosticsLogger.clear()
+            let oldExports = fileManager.temporaryDirectory.appendingPathComponent("YamabikoChatExports", isDirectory: true)
+            try? fileManager.removeItem(at: oldExports)
+        }
+        try databaseMigrator.migrate(queue)
         try recoverStreamCheckpoints(in: queue)
         // Old diagnostic snapshots copied complete input histories and image
         // payloads into SQLite on every run. Reclaim the pages their migration
@@ -1050,6 +1059,28 @@ enum AppDatabase {
                     fusionDebugModeEnabled = 0, fusionLogPromptsEnabled = 0,
                     fusionCustomPresetJSON = ''
                 """)
+        }
+
+        migrator.registerMigration("v34_redact_persisted_diagnostic_credentials") { db in
+            let locations = [
+                ("chat_message_tool_activity", "piExecutionJSON"),
+                ("auto_conversation_messages", "piExecutionJSON"),
+                ("dual_chat_messages", "modelAToolActivityJSON"),
+                ("dual_chat_messages", "modelBToolActivityJSON"),
+                ("fusion_traces", "traceJSON"),
+                ("chat_stream_checkpoints", "payload"),
+                ("conversation_context_checkpoints", "payload")
+            ]
+            for (table, column) in locations {
+                guard try db.columns(in: table).contains(where: { $0.name == column }) else { continue }
+                let rows = try Row.fetchAll(db, sql: "SELECT rowid AS securityRowID, \(column) FROM \(table) WHERE instr(\(column), 'yamabiko.pi-agent-execution') > 0")
+                for row in rows {
+                    let id: Int64 = row["securityRowID"]
+                    guard let text: String = row[column], let value = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) else { continue }
+                    let cleaned = try JSONEncoder().encode(PiDiagnosticSanitizer.sanitize(value))
+                    try db.execute(sql: "UPDATE \(table) SET \(column) = ? WHERE rowid = ?", arguments: [String(decoding: cleaned, as: UTF8.self), id])
+                }
+            }
         }
 
         return migrator

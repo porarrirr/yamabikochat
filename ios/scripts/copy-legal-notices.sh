@@ -15,6 +15,7 @@ cp "${src_root}/THIRD_PARTY_NOTICES.md" "${dest}/THIRD_PARTY_NOTICES.md"
 cp "${src_root}/third_party/nodejs-mobile/LICENSE" "${dest}/NODEJS_LICENSE.txt"
 cp "${src_root}/third_party/npm-licenses.md" "${dest}/npm-licenses.md"
 cp "${src_root}/third_party/pi-subagents-LICENSE.txt" "${dest}/PI_SUBAGENTS_LICENSE.txt"
+cp "${src_root}/third_party/pyodide-LICENSE.txt" "${dest}/PYODIDE_LICENSE.txt"
 
 font_license_root="${src_root}/ios/YamabikoChat/Python/Resources/Fonts/licenses"
 font_license_output="${dest}/NOTO_FONTS_LICENSES.txt"

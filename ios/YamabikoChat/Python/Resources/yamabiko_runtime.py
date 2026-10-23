@@ -1,8 +1,8 @@
-"""Stateful execution harness for YamabikoChat's embedded CPython.
+"""Stateful execution harness for YamabikoChat's isolated WebAssembly Python.
 
-The audit policy reduces accidental damage from LLM-generated code. CPython is
-still in the app process, so this must not be described as an attacker-resistant
-sandbox.
+The audit policy reduces accidental mistakes inside the virtual filesystem.
+Security is enforced outside Python by WebKit, CSP, WebAssembly, and the native
+workspace broker. Never run untrusted cells in a native app-process interpreter.
 """
 
 from __future__ import annotations

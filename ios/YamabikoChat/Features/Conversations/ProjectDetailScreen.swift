@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ProjectDetailScreen: View {
+    @Environment(\.appAccent) private var appAccent
     private enum ProjectTab: String, CaseIterable, Identifiable {
         case chats
         case sources
@@ -425,7 +426,7 @@ struct ProjectDetailScreen: View {
         HStack(spacing: 12) {
             Image(systemName: fileIcon(for: file.name))
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(appAccent.color)
                 .frame(width: 30, height: 38)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -515,7 +516,7 @@ struct ProjectDetailScreen: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(appAccent.color)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(L10n.text("送信")))

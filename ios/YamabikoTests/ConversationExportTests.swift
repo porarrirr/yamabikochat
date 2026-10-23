@@ -65,6 +65,7 @@ final class ConversationExportTests: XCTestCase {
         let call = ToolCall(id: "call-1", name: PythonExecuteTool.name, argumentsJSON: #"{"code":"print(42)"}"#)
         let execution: JSONValue = .object([
             "format": .string("yamabiko.pi-agent-execution"),
+            "version": .number(4),
             "state": .object([
                 "messages": .array([
                     .object(["role": .string("user"), "content": .string("question")]),

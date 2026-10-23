@@ -12,6 +12,7 @@ struct ConversationListScreen: View {
     @Binding var selection: Int64?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appAccent) private var appAccent
 
     var onSelect: (Int64) -> Void
     var onOpenSettings: () -> Void
@@ -486,7 +487,7 @@ struct ConversationListScreen: View {
             if viewModel.isSelectionMode {
                 Image(systemName: viewModel.selectedConversationIds.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22))
-                    .foregroundStyle(viewModel.selectedConversationIds.contains(entry.id) ? Color.accentColor : .secondary)
+                    .foregroundStyle(viewModel.selectedConversationIds.contains(entry.id) ? appAccent.color : .secondary)
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -503,10 +504,10 @@ struct ConversationListScreen: View {
                             Text(L10n.text("シークレット"))
                                 .font(.caption2.weight(.semibold))
                         }
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(appAccent.color)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(Color.accentColor.opacity(0.12))
+                        .background(appAccent.color.opacity(0.12))
                         .clipShape(Capsule())
                     }
 

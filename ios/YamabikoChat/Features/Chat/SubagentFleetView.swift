@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SubagentFleetView: View {
+    @Environment(\.appAccent) private var appAccent
     let runs: [SubagentRun]
     var onLayoutChange: () -> Void = {}
     @State private var expanded = false
@@ -32,7 +33,7 @@ struct SubagentFleetView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "person.3.fill").font(.title3).foregroundStyle(.tint)
                         .frame(width: 34, height: 34)
-                        .background(Color.accentColor.opacity(0.10), in: Circle())
+                        .background(appAccent.color.opacity(0.10), in: Circle())
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Text("\(runs.count) サブエージェント").font(.subheadline.weight(.semibold))

@@ -42,18 +42,20 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 24.22.1
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      - name: Cache iOS Python wheels
+      - name: Cache offline Python WASM assets
         uses: actions/cache@v6
         with:
-          path: ios/Vendor/PythonWheelhouse
-          key: ios-python-wheels-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('ios/app-store-build.env', 'ios/python-scientific-sources.env', 'ios/python-wheels.sha256', 'ios/scripts/build-python-scientific-wheels.sh', 'ios/scripts/validate-active-app-store-sdk.sh', 'ios/scripts/run-ios-cibuildwheel.py') }}
+          path: |
+            ios/Vendor/Pyodide
+            ios/Vendor/PyodideCache
+          key: ios-python-wasm-${{ runner.os }}-${{ hashFiles('ios/scripts/bootstrap-python-wasm.py') }}
 
       - name: Install XcodeGen
         run: brew install xcodegen

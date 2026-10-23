@@ -1078,7 +1078,7 @@ final class ConversationRepository: @unchecked Sendable {
         let transcriptData = try JSONEncoder().encode(payload.providerTranscript)
         let attachmentPathsData = try JSONEncoder().encode(payload.attachmentPaths)
         let rotationNoticesData = try JSONEncoder().encode(payload.rotationNotices)
-        let piExecutionData = try payload.piExecution.map { try JSONEncoder().encode($0) }
+        let piExecutionData = try payload.piExecution.map { try JSONEncoder().encode(PiDiagnosticSanitizer.sanitize($0)) }
         var activity = ChatMessageToolActivity(
             messageId: messageId,
             variantId: variantId,

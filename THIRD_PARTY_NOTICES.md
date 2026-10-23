@@ -18,7 +18,7 @@ Production npm packages pulled in by the Pi Agent runtime are listed in [third_p
 | `pi-subagents` | 0.79.2 | MIT | Subagent delegation and parallel workflows | https://github.com/nicobailon/pi-subagents |
 | `pi-grok` | 0.10.1 (`8b304e65c088f84ccb932959d97739245fe47d97`) | MIT | SuperGrok / xAI helper | https://github.com/stnly/pi-grok |
 | `typebox` | 1.3.27 | MIT | Pi runtime schemas | https://www.npmjs.com/package/typebox |
-| NodeMobile / nodejs-mobile | 24.18.0-0 | Node.js composite (see file) | Embedded Node.js (XCFramework) | https://github.com/gmaclennan/nodejs-mobile (Node.js terms: https://github.com/JaneaSystems/nodejs-mobile) |
+| NodeMobile / nodejs-mobile | 24.22.1-yamabiko.0 | Node.js composite (see file) | Embedded Node.js (XCFramework) | https://github.com/porarrirr/nodejs-mobile (fork of https://github.com/gmaclennan/nodejs-mobile) |
 
 `markdown-renderer.js` in the MathJax resource folders is original YamabikoChat code (MIT).
 
@@ -38,18 +38,19 @@ Mermaid's MIT license text is bundled next to the Mermaid browser asset.
 
 | Component | Version / pin | License | Source |
 | --- | --- | --- | --- |
-| CPython / Python-Apple-support | 3.14-b10 | PSF-2.0 and included third-party terms | https://github.com/beeware/Python-Apple-support |
-| NumPy | `ec6b2b2626d0fc2b1505f3ffd7905862ebe605f4` | BSD-3-Clause and included third-party terms | https://github.com/numpy/numpy |
-| Matplotlib | 3.11.1 | PSF-based Matplotlib license and included third-party terms | https://github.com/matplotlib/matplotlib |
-| Pillow | 12.3.0 | HPND and included third-party terms | https://github.com/python-pillow/Pillow |
+| Pyodide / CPython WebAssembly | 314.0.7 / Python 3.14.2 | MPL-2.0 / PSF-2.0 and included third-party terms | https://github.com/pyodide/pyodide |
+| NumPy | 2.4.6 | BSD-3-Clause and included third-party terms | https://github.com/numpy/numpy |
+| Matplotlib | 3.10.8 | PSF-based Matplotlib license and included third-party terms | https://github.com/matplotlib/matplotlib |
+| Pillow | 12.2.0 | HPND and included third-party terms | https://github.com/python-pillow/Pillow |
 | contourpy | 1.3.3 | BSD-3-Clause | https://github.com/contourpy/contourpy |
 | kiwisolver | 1.5.0 | BSD-3-Clause | https://github.com/nucleic/kiwi |
 | cycler | 0.12.1 | BSD-3-Clause | https://github.com/matplotlib/cycler |
-| fonttools | 4.63.0 | MIT | https://github.com/fonttools/fonttools |
-| packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
+| fonttools | 4.62.1 | MIT | https://github.com/fonttools/fonttools |
+| packaging | 26.1 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
 | pyparsing | 3.3.2 | MIT | https://github.com/pyparsing/pyparsing |
 | python-dateutil | 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause | https://github.com/dateutil/dateutil |
 | six | 1.17.0 | MIT | https://github.com/benjaminp/six |
+| pytz | 2026.1.post1 | MIT | https://github.com/stub42/pytz |
 | Noto multilingual fonts | `google/fonts@ec626514f79f831f1ab848a82114a0ce7e2d6372` | OFL-1.1 | https://github.com/google/fonts/tree/ec626514f79f831f1ab848a82114a0ce7e2d6372/ofl |
 
 The package-specific license and attribution files shipped by these wheels are

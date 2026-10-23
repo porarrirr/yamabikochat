@@ -75,7 +75,7 @@ final class GenerationLivePerformanceTests: XCTestCase {
             }
         }
         let sessions = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: sessions, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: sessions)
         let executors: [any LocalToolExecutor] = [
             PythonExecuteTool(worker: worker, sessions: sessions,
                 attachments: AttachmentRepository(generatedFilesRootOverride: root.appendingPathComponent("exports"))),

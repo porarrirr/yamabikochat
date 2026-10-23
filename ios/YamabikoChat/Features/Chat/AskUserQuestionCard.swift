@@ -29,6 +29,7 @@ struct AskUserQuestionCard: View {
 }
 
 private struct AskUserQuestionFlow: View {
+    @Environment(\.appAccent) private var appAccent
     @ObservedObject var coordinator: UserQuestionCoordinator
     let pending: UserQuestionCoordinator.PendingRequest
     let rendersEditableField: Bool
@@ -176,10 +177,10 @@ private struct AskUserQuestionFlow: View {
                         if display.recommended {
                             Text(L10n.text("推奨"))
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(appAccent.color)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                                .background(appAccent.color.opacity(0.12), in: Capsule())
                         }
                     }
                     if let description = option.description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
@@ -214,7 +215,7 @@ private struct AskUserQuestionFlow: View {
         if question.multiSelect {
             Image(systemName: selected ? "checkmark.square.fill" : "square")
                 .font(.system(size: 23, weight: .medium))
-                .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                .foregroundStyle(selected ? appAccent.color : Color.secondary)
                 .frame(width: 34, height: 34)
         } else {
             Text("\(index + 1)")

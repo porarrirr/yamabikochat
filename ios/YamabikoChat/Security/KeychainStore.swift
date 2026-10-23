@@ -55,7 +55,7 @@ final class KeychainStore: SecureCredentialStore {
 
             let attributes: [CFString: Any] = [
                 kSecValueData: data,
-                kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock
+                kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ]
 
             let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
@@ -94,6 +94,12 @@ final class KeychainStore: SecureCredentialStore {
         guard let data = result as? Data else {
             throw KeychainStoreError.invalidEncoding
         }
+        // Upgrade existing items too, without migrating credentials through a file.
+        let updateQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: key
+        ]
+        let update = SecItemUpdate(updateQuery as CFDictionary, [kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary)
+        guard update == errSecSuccess else { throw KeychainStoreError.unexpectedStatus(update) }
         return String(data: data, encoding: .utf8)
     }
 

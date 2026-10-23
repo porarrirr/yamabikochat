@@ -10,8 +10,7 @@ final class PythonRuntimeTests: XCTestCase {
         let store = PythonSessionStore(rootOverride: root)
         let worker = PythonWorker(
             sessions: store,
-            timeoutSeconds: 60,
-            memoryLimitBytes: 4_000_000_000
+            timeoutSeconds: 60
         )
         let response = try await worker.execute(
             sessionID: "scientific-integration",
@@ -80,8 +79,7 @@ plt.savefig("/workspace/matplotlib.png")
         let store = PythonSessionStore(rootOverride: root)
         let worker = PythonWorker(
             sessions: store,
-            timeoutSeconds: 0.5,
-            memoryLimitBytes: 4_000_000_000
+            timeoutSeconds: 0.5
         )
 
         let first = try await worker.execute(
@@ -104,7 +102,7 @@ plt.savefig("/workspace/matplotlib.png")
         )
         let afterInterrupt = try await worker.execute(
             sessionID: "integration",
-            code: "value + 4",
+            code: "'value' in globals()",
             reset: false,
             attachmentPaths: []
         )
@@ -114,7 +112,7 @@ plt.savefig("/workspace/matplotlib.png")
         XCTAssertEqual(second.resultRepr, "43")
         XCTAssertEqual(timedOut.status, "error")
         XCTAssertEqual(timedOut.error?.type, "TimeoutError")
-        XCTAssertEqual(afterInterrupt.resultRepr, "44")
+        XCTAssertEqual(afterInterrupt.resultRepr, "False", "A hard timeout discards the isolated worker's namespace")
 
         let exportedRoot = root.appendingPathComponent("exported", isDirectory: true)
         let tool = PythonExecuteTool(
@@ -146,6 +144,22 @@ plt.savefig("/workspace/matplotlib.png")
         XCTAssertEqual(response.artifacts.first?.root, "workspace")
         XCTAssertEqual(response.artifacts.first?.mime, "image/png")
         XCTAssertEqual(response.error?.type, "ValueError", response.error?.traceback ?? response.stderr)
+    }
+
+    func testSessionEvictionReleasesWorkersAndPreservesWorkspaceFiles() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("python-eviction-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: sessions, maximumRetainedSessions: 1)
+        let first = try await worker.execute(sessionID: "first", code: "remembered = 42\nopen('keep.txt', 'w').write('keep')", reset: false, attachmentPaths: [])
+        XCTAssertEqual(first.status, "ok")
+        let second = try await worker.execute(sessionID: "second", code: "42", reset: false, attachmentPaths: [])
+        XCTAssertEqual(second.status, "ok")
+        let restored = try await worker.execute(sessionID: "first", code: "print(open('keep.txt').read())\n'remembered' in globals()", reset: false, attachmentPaths: [])
+        XCTAssertEqual(restored.status, "ok")
+        XCTAssertEqual(restored.resultRepr, "False")
+        XCTAssertTrue(restored.stdout.contains("keep"))
+        await worker.resetSession(sessionID: "first")
     }
 
     func testSessionStorePreparationPreservesConversationWorkspace() throws {
@@ -188,7 +202,7 @@ plt.savefig("/workspace/matplotlib.png")
             .appendingPathComponent("python-virtual-workspace-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10)
 
         let response = try await worker.execute(
             sessionID: "virtual-path",
@@ -224,7 +238,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
             try? FileManager.default.removeItem(at: generated)
         }
         let store = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10)
         let attachments = AttachmentRepository(generatedFilesRootOverride: generated)
         let editor = StrReplaceEditorTool(
             workspaces: EditorWorkspaceStore(rootOverride: root),
@@ -318,7 +332,6 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
         let worker = PythonWorker(
             sessions: store,
             timeoutSeconds: 10,
-            memoryLimitBytes: 4_000_000_000,
             maximumWorkspaceFiles: 10,
             maximumWorkspaceBytes: 100,
             maximumFileBytes: 4,
@@ -338,7 +351,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
         XCTAssertEqual(response.status, "error")
         XCTAssertEqual(response.error?.type, "ResourceLimitExceeded")
         XCTAssertEqual(try String(contentsOf: editorFile), "keep")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.workspace.appendingPathComponent("large.bin").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.workspace.appendingPathComponent("large.bin").path), "Rejected transfers must not modify the native workspace")
     }
 
     func testWorkerCancellationResetsNamespaceAndPreservesWorkspace() async throws {
@@ -348,8 +361,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
         let store = PythonSessionStore(rootOverride: root)
         let worker = PythonWorker(
             sessions: store,
-            timeoutSeconds: 10,
-            memoryLimitBytes: 4_000_000_000
+            timeoutSeconds: 10
         )
         let paths = try store.prepare(sessionID: "cancelled")
         let editorFile = paths.workspace.appendingPathComponent("editor.txt")
@@ -379,7 +391,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
             .appendingPathComponent("python-reset-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10)
         let paths = try store.prepare(sessionID: "reset")
         try Data("keep".utf8).write(to: paths.workspace.appendingPathComponent("editor.txt"))
 
@@ -455,7 +467,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
         defer { try? FileManager.default.removeItem(at: root) }
 
         let store = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: store, timeoutSeconds: 10, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 10)
         let response = try await worker.execute(
             sessionID: "outputs-contract",
             code: #"""
@@ -489,7 +501,7 @@ Path("outputs/report.txt").write_text("ready")
         defer { try? FileManager.default.removeItem(at: root) }
 
         let store = PythonSessionStore(rootOverride: root)
-        let worker = PythonWorker(sessions: store, timeoutSeconds: 60, memoryLimitBytes: 4_000_000_000)
+        let worker = PythonWorker(sessions: store, timeoutSeconds: 60)
 
         let warmup = try await worker.execute(
             sessionID: "figure-warmup",

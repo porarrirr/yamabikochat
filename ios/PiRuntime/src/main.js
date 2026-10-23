@@ -25,6 +25,11 @@ import { installAzureProvider, azureCatalogResolution, azureExecutionModel, azur
 import { installCatalogProviderAdapters, verifiedCatalogResolution, verifiedExecutionModel, verifiedStreamOptions, catalogProviderEnvironment, verifiedCatalogModelSource } from "./catalog-provider-contracts.js";
 import { compactContext } from "./compaction.js";
 import { createMobileSubagentsHost } from "./subagents.js";
+import { credentialFetch, diagnosticRedactor, withCredentialSecurity } from "./credential-security.js";
+
+// Applies to Pi's SDKs as well as OAuth. In particular, the Google SDK uses the
+// global transport rather than Pi's optional per-request fetch hook.
+globalThis.fetch = credentialFetch(globalThis.fetch.bind(globalThis));
 
 const port = Number(process.argv[2]);
 const token = process.argv[3];
@@ -40,10 +45,7 @@ const RUNTIME_LOG_MAX_BYTES = 1024 * 1024;
 let lastHealthRequestAtMs = null;
 
 function sanitizeRuntimeLogValue(value) {
-  return String(value ?? "")
-    .replace(/\bbearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
-    .replace(/\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|password)\s*[:=]\s*["']?[^"'\s,&]+/gi, "$1=[REDACTED]")
-    .replace(/([?&](?:code|state|access_token|refresh_token|id_token|id_token_hint|token|password|secret|api_key|apikey|authorization)=)[^&\s]+/gi, "$1[REDACTED]");
+  return diagnosticRedactor().text(value);
 }
 
 function appendRuntimeLifecycleLog(event, metadata = {}) {
@@ -79,6 +81,19 @@ authModels.setProvider(chatGPTPlan.provider);
 runtimeModels.setProvider(chatGPTPlan.provider);
 const pendingAuthRegistrations = new Map();
 let activeAuthLogin = null;
+let activeAuthProvider = null;
+const authGenerations = new Map();
+const signedOutProviders = new Set();
+const authGeneration = provider => authGenerations.get(provider) || 0;
+const loggedOut = () => Object.assign(new Error("OAuth session was signed out"), { code: "oauth_signed_out" });
+
+function stopOAuthProvider(provider) {
+  const providerId = authProviderId(provider);
+  authGenerations.set(provider, authGeneration(provider) + 1);
+  signedOutProviders.add(providerId);
+  if (activeAuthProvider === provider) activeAuthLogin?.abort(loggedOut());
+  for (const run of runs.values()) if (run.providers?.has(providerId) || run.state.model.provider === providerId) run.abort();
+}
 
 const VERIFIED_MODEL_SOURCES = new Map();
 const DYNAMIC_CONTRACT_MODELS = new Map();
@@ -216,6 +231,7 @@ if (runtimeLogPath) {
 }
 
 function json(res, status, value) {
+  if (status >= 400) value = diagnosticRedactor().value(value);
   const body = JSON.stringify(value);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
   res.end(body);
@@ -224,10 +240,13 @@ function json(res, status, value) {
 async function body(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  diagnosticRedactor().observe(parsed);
+  return parsed;
 }
 
 function send(res, event) {
+  if (["diagnostic", "error", "execution_snapshot", "subagent_update"].includes(event.type)) event = diagnosticRedactor().value(event);
   res.write(`${JSON.stringify(event)}\n`);
 }
 
@@ -352,6 +371,8 @@ async function loginOAuth(provider, method, res, context = {}) {
   if (activeAuthLogin) throw new Error("Another Pi OAuth login is already running");
   const controller = new AbortController();
   activeAuthLogin = controller;
+  activeAuthProvider = provider;
+  const generation = authGeneration(provider);
   const abortDisconnectedLogin = () => { if (!res.writableEnded) controller.abort(new Error("ChatGPT login disconnected")); };
   res.on("close", abortDisconnectedLogin);
   const heartbeat = setInterval(() => { if (!res.destroyed) send(res, { type: "auth_progress", message: "Waiting for authorization" }); }, 15_000);
@@ -389,27 +410,37 @@ async function loginOAuth(provider, method, res, context = {}) {
         ? await withGrokBrowserLogin(() => grokOAuth.login(callbacks))
         : await grokOAuth.loginDeviceCode(callbacks);
       credential = oauthCredential(credential);
-      await authCredentials.modify(authProviderId(provider), async () => credential);
+      await authCredentials.modify(authProviderId(provider), async () => {
+        if (generation !== authGeneration(provider)) throw loggedOut();
+        return credential;
+      });
     } else {
       throw new Error(`Unsupported Pi OAuth provider: ${provider}`);
     }
+    if (generation !== authGeneration(provider)) { await authCredentials.delete(authProviderId(provider)); throw loggedOut(); }
+    signedOutProviders.delete(authProviderId(provider));
     const normalized = oauthCredential(credential);
+    diagnosticRedactor().observe({ credential: normalized });
     send(res, { type: "auth_completed", credential: normalized, profile: authProfile(provider, normalized) });
   } finally {
     clearInterval(heartbeat);
     res.off("close", abortDisconnectedLogin);
     activeAuthLogin = null;
+    activeAuthProvider = null;
   }
 }
 
 async function resolveOAuth(provider, rawCredential, force) {
+  const generation = authGeneration(provider);
   const providerId = authProviderId(provider);
+  if (signedOutProviders.has(providerId)) throw loggedOut();
   let credential = oauthCredential(rawCredential);
   if (provider === "chatgpt") {
     const current = await authCredentials.read(providerId);
     if (current && current.clientId !== credential.clientId) chatGPTPlan.clearCatalog();
   }
   await authCredentials.modify(providerId, async current => {
+    if (generation !== authGeneration(provider)) throw loggedOut();
     if (provider === "chatgpt") {
       chatGPTPlan.profile(credential);
       // A native request may still hold the previous rotated token set. Keep
@@ -426,11 +457,16 @@ async function resolveOAuth(provider, rawCredential, force) {
     const expiresSoon = Date.now() + 5 * 60 * 1000 >= credential.expires;
     if (expiresSoon) {
       credential = oauthCredential(await grokOAuth.refresh(credential));
-      await authCredentials.modify(providerId, async () => credential);
+      await authCredentials.modify(providerId, async () => {
+        if (generation !== authGeneration(provider)) throw loggedOut();
+        return credential;
+      });
     }
   }
 
+  if (generation !== authGeneration(provider)) throw loggedOut();
   const updated = oauthCredential(await authCredentials.read(providerId));
+  diagnosticRedactor().observe({ credential: updated });
   const profile = authProfile(provider, updated);
   return {
     credential: updated,
@@ -990,27 +1026,16 @@ function timeoutMs(request) {
 }
 
 function exportableProviderPayload(value) {
-  const seen = new WeakSet();
-  return JSON.parse(JSON.stringify(value, (key, nested) => {
-    const normalizedKey = key.toLowerCase();
-    if (["apikey", "api_key", "authorization", "accesstoken", "access_token", "credential"].includes(normalizedKey)) {
-      return "[REDACTED]";
-    }
-    if (normalizedKey === "abortsignal" || normalizedKey === "signal") return undefined;
-    if (typeof nested === "function") return undefined;
-    if (nested && typeof nested === "object") {
-      if (seen.has(nested)) return "[CIRCULAR]";
-      seen.add(nested);
-    }
-    return nested;
-  }));
+  return diagnosticRedactor().value(value);
 }
 
 
 function standardStreamFunction(request, config, report, captureProviderRequest) {
   const env = normalizedProviderEnvironment(config.catalogProvider || config.provider, config.env);
   const sessionId = request.metadata?.promptCacheKey || request.metadata?.codexSessionId;
-  return (model, context, options = {}) => runtimeModels.streamSimple(model, context, {
+  return (model, context, options = {}) => {
+    if (signedOutProviders.has(config.provider)) throw loggedOut();
+    return runtimeModels.streamSimple(model, context, {
     ...options,
     apiKey: config.apiKey,
     env: Object.keys(env).length ? env : undefined,
@@ -1053,7 +1078,8 @@ function standardStreamFunction(request, config, report, captureProviderRequest)
           )
         : mutated;
     }
-  });
+    });
+  };
 }
 
 function makeTools(request, runId, res, subagentId) {
@@ -1191,9 +1217,9 @@ function finalResponse(assistants, contextUsage, generatedMessages = [], provide
 
 function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events, resolution, startedAtMs, failure = null }) {
   const messages = agent.state.messages;
-  return {
+  return exportableProviderPayload({
     format: "yamabiko.pi-agent-execution",
-    version: 3,
+    version: 4,
     runtimeContractVersion: RUNTIME_CONTRACT_VERSION,
     startedAtMs,
     completedAtMs: Date.now(),
@@ -1226,11 +1252,15 @@ function piExecutionSnapshot({ agent, effectiveRequest, providerRequests, events
     events,
     failure,
     redactions: ["Credentials, message bodies, image bytes, and provider payload bodies"]
-  };
+  });
 }
 
 async function runAgent(envelope, res) {
   const { runId, request, config } = envelope;
+  if (config.provider === "xai-oauth") {
+    const credential = await authCredentials.read("xai-oauth");
+    if (!credential || credential.access !== config.apiKey) throw loggedOut();
+  }
   if (config.provider === CHATGPT_PLAN_PROVIDER) {
     const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
     if (!credential || credential.access !== config.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
@@ -1317,11 +1347,17 @@ async function runAgent(envelope, res) {
     maxRetryDelayMs: 60000
   });
   const initialMessageCount = agent.state.messages.length;
+  const providers = new Set([model.provider]);
   let subagentHost;
   const prepareSubagentHost = () => createMobileSubagentsHost({
       agent, config: resolvedConfig, tools: agent.state.tools,
       makeChildTools: id => makeTools(effectiveRequest, runId, res, id),
       resolve: async childConfig => {
+        if (childConfig.provider === "xai-oauth") {
+          const credential = await authCredentials.read("xai-oauth");
+          if (!credential || credential.access !== childConfig.apiKey) throw loggedOut();
+        }
+        providers.add(childConfig.provider);
         if (childConfig.provider === CHATGPT_PLAN_PROVIDER) {
           const credential = await authCredentials.read(CHATGPT_PLAN_PROVIDER);
           if (!credential || credential.access !== childConfig.apiKey) throw Object.assign(new Error("ChatGPT account credentials must be resolved before execution"), { code: "chatgpt_reconnect_required" });
@@ -1350,7 +1386,7 @@ async function runAgent(envelope, res) {
     });
   let abortRequested = false;
   const abort = () => { abortRequested = true; agent.abort(); };
-  runs.set(runId, { abort, state: agent.state });
+  runs.set(runId, { abort, state: agent.state, providers });
   const abortDisconnectedRun = () => { if (!res.writableEnded) abort(); };
   res.on("close", abortDisconnectedRun);
   res.on("error", abortDisconnectedRun);
@@ -1442,7 +1478,7 @@ async function runAgent(envelope, res) {
       : null;
     const generatedMessages = agent.state.messages.slice(initialMessageCount);
     const response = finalResponse(runAssistants, contextEstimate, generatedMessages, config.provider);
-    if (subagentHost) response.subagents = subagentHost.snapshots();
+    if (subagentHost) response.subagents = exportableProviderPayload(subagentHost.snapshots());
     response.piExecution = piExecutionSnapshot({
       agent,
       effectiveRequest,
@@ -1488,7 +1524,7 @@ async function runAgent(envelope, res) {
   }
 }
 
-const handleRequest = async (req, res) => {
+const handleRequest = (req, res) => withCredentialSecurity(async () => {
   if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: "unauthorized" });
   try {
     if (req.method === "GET" && req.url === "/health") {
@@ -1566,7 +1602,7 @@ const handleRequest = async (req, res) => {
     if (req.method === "POST" && req.url === "/v1/auth/revoke") {
       const value = await body(req);
       if (value.provider !== "chatgpt") throw new Error("Unsupported revocation provider");
-      for (const agent of runs.values()) if (agent.state.model.provider === CHATGPT_PLAN_PROVIDER) agent.abort();
+      stopOAuthProvider("chatgpt");
       try {
         await authCredentials.modify(CHATGPT_PLAN_PROVIDER, async current => {
           const credential = current?.clientId === value.credential?.clientId ? current : value.credential;
@@ -1577,6 +1613,13 @@ const handleRequest = async (req, res) => {
         await authCredentials.delete(CHATGPT_PLAN_PROVIDER);
         chatGPTPlan.clearCatalog();
       }
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && req.url === "/v1/auth/logout") {
+      const value = await body(req);
+      if (value.provider !== "supergrok") throw new Error("Unsupported local logout provider");
+      stopOAuthProvider(value.provider);
+      await authCredentials.delete(authProviderId(value.provider));
       return json(res, 200, { ok: true });
     }
     if (req.method === "POST" && req.url === "/v1/auth/login") {
@@ -1628,7 +1671,7 @@ const handleRequest = async (req, res) => {
     if (!res.headersSent) json(res, 500, { error: error?.message || String(error) });
     else { send(res, errorEvent(error)); res.end(); }
   }
-};
+});
 
 installRuntimeLifecycle({
   createServer: () => http.createServer(handleRequest),

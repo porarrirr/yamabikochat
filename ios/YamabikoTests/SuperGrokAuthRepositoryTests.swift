@@ -35,4 +35,28 @@ final class SuperGrokAuthRepositoryTests: XCTestCase {
         XCTAssertEqual(SuperGrokModelCatalog.model(for: "grok-4.5")?.supportsReasoning, true)
         XCTAssertEqual(SuperGrokModelCatalog.defaultModel, "grok-4.5")
     }
+
+    func testLogoutClearsRuntimeAndLocalCredential() async throws {
+        let store = PiAuthTestCredentialStore()
+        let cleared = expectation(description: "runtime logout")
+        let repo = SuperGrokAuthRepository(credentialStore: store,
+            loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            logoutHandler: { cleared.fulfill() })
+        guard case .success = await repo.loginWithBrowser() else { return XCTFail("login") }
+        guard case .success = await repo.logout() else { return XCTFail("logout") }
+        await fulfillment(of: [cleared], timeout: 1)
+        XCTAssertNil(try store.readSecret(key: "pi_oauth_supergrok_v1"))
+        XCTAssertFalse(repo.hasAuthToken())
+    }
+
+    func testRuntimeLogoutFailureStillRemovesLocalTokensAndIsReported() async throws {
+        let store = PiAuthTestCredentialStore()
+        let repo = SuperGrokAuthRepository(credentialStore: store,
+            loginHandler: { _, _, _ in oauthResolution(accountID: nil) },
+            logoutHandler: { throw URLError(.cannotConnectToHost) })
+        _ = await repo.loginWithBrowser()
+        guard case .failure = await repo.logout() else { return XCTFail("Runtime cleanup failure must be reported") }
+        XCTAssertNil(try store.readSecret(key: "pi_oauth_supergrok_v1"))
+        XCTAssertFalse(repo.currentState().isLoggedIn)
+    }
 }

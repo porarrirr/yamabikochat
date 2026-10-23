@@ -14,12 +14,13 @@ import { createSubagentProgress } from "./subagent-progress.js";
 import { Type } from "typebox";
 import pccSubagentSchema from "./pcc-subagent-schema.json" with { type: "json" };
 import { aggregateUsage } from "./usage-contract.js";
+import { diagnosticRedactor } from "./credential-security.js";
 
 const owners = new AsyncLocalStorage();
 const EFFORTS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const failure = (code, message = code) => Object.assign(new Error(message), { code });
 const identity = model => `${model.provider}/${model.id}`;
-const errorResult = error => ({ content: [{ type: "text", text: `${error.code || "subagent_error"}: ${error.message}` }], details: { error: error.code || "subagent_error" }, isError: true });
+const errorResult = error => diagnosticRedactor().value({ content: [{ type: "text", text: `${error.code || "subagent_error"}: ${error.message}` }], details: { error: error.code || "subagent_error" }, isError: true });
 
 // Every provider exposes the same explicit mobile subset. Execution still
 // delegates to the registered pi-subagents tool, including validation and limits.
@@ -191,7 +192,7 @@ setChildSessionFactory({
         systemPrompt: [owner.parentSystemPrompt, launch.systemPrompt, launch.appendSystemPrompt].filter(Boolean).join("\n\n"),
         tools, hooks: launch.hooks, sessionManager: manager, allowExtensionTools: false });
     } catch (error) {
-      progress.finish("failed", { error: error.message });
+      progress.finish("failed", { error: diagnosticRedactor().text(error.message) });
       throw error;
     }
     session.subscribe(event => progress.accept(event));
@@ -205,11 +206,11 @@ setChildSessionFactory({
           await session.prompt(task, { expandPromptTemplates: false });
           const last = session.messages.filter(message => message.role === "assistant").at(-1);
           if (last?.errorMessage || last?.stopReason === "error" || last?.stopReason === "aborted") {
-            throw new Error(last.errorMessage || last.stopReason);
+            throw new Error(diagnosticRedactor().text(last.errorMessage || last.stopReason));
           }
           progress.finish(aborted ? "cancelled" : "completed", { usage: aggregateUsage(session.messages.filter(message => message.role === "assistant")) });
         } catch (error) {
-          progress.finish(aborted || launch.signal?.aborted ? "cancelled" : "failed", { error: error.message });
+          progress.finish(aborted || launch.signal?.aborted ? "cancelled" : "failed", { error: diagnosticRedactor().text(error.message) });
           throw error;
         }
       },

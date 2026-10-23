@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProjectListScreen: View {
+    @Environment(\.appAccent) private var appAccent
     private struct PendingProjectDeletion {
         let id: Int64
         let title: String
@@ -180,7 +181,7 @@ struct ProjectListScreen: View {
                             } label: {
                                 Text(L10n.text("新しいプロジェクトを作成"))
                                     .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(appAccent.color)
                             }
                             .padding(.top, 4)
                         }
