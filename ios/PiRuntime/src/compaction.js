@@ -28,6 +28,9 @@ export async function compactContext({ messages, model, config, streamFn, signal
   }]);
   return {
     text,
+    // Match the normal ProviderResponse wire shape: Swift requires this array
+    // when decoding completion, including a summary that never calls tools.
+    toolCalls: [],
     usage: {
       ...providerUsage(usage),
       contextTokens: estimateContextTokens(compacted).tokens,

@@ -371,7 +371,8 @@ struct SvgDiagramView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 38)
+                .padding(.vertical, 8)
+                .frame(minHeight: 38)
                 Divider()
             }
 

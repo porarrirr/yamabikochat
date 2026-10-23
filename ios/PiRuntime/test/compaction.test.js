@@ -31,6 +31,8 @@ for (const provider of ["openai-codex", "openai-chatgpt", "anthropic", "google"]
       }
     });
     assert.equal(calls, 1);
+    // ProviderResponse's synthesized Swift decoder requires this even for summaries.
+    assert.deepEqual(result.toolCalls, []);
     assert.equal(result.providerTranscript[0].role, "user");
     assert.match(result.providerTranscript[0].content, /<summary>\nPreserve project constraints/);
     assert.equal(result.usage.inputTokens, 100);
@@ -96,6 +98,7 @@ test("bundled runtime compacts through the configured Pi adapter without generat
   const events = output.trim().split("\n").map(JSON.parse);
   const completion = events.find(event => event.type === "completed");
   assert.ok(completion, output);
+  assert.deepEqual(completion.response.toolCalls, []);
   assert.equal(requests.length, 1);
   assert.match(JSON.stringify(requests[0].messages), /<conversation>/);
   assert.equal(events.some(event => event.type === "text_delta"), false);

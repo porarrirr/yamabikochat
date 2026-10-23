@@ -5,6 +5,110 @@ import JavaScriptCore
 @testable import YamabikoChat
 
 final class MathMarkdownViewTests: XCTestCase {
+    @MainActor
+    func testNativeTableFitsWrappedTextWithoutOverlappingRows() async throws {
+        let source = """
+        | 候補 | あなたにとっての価値 |
+        | --- | --- |
+        | **追加契約なし** | 既存の Devin の軽量モデルを活用できれば、追加費用なしで悩みを検証できる |
+        | **OpenCode Go** | 月10ドル。OpenCode 以外のエージェントでも使え、GLM-5.3-Flash や DeepSeek V4.1 Flash などが掲載されている |
+        | **Claude Pro** | Claude を使う理由が明確なら候補。ただし、すでに強い AI が複数ある状況では、契約だけ増えるおそれ |
+        | **X サブスク** | X の機能や利用自体に価値を感じる人向け |
+        """
+        for width: CGFloat in [320, 402, 768] {
+            for typeSize: DynamicTypeSize in [.large, .accessibility3] {
+                for streaming in [false, true] {
+                    let host = UIHostingController(rootView:
+                        NativeMarkdownView(markdownText: source, isStreaming: streaming,
+                            preparsedBlocks: NativeMarkdownParser.parse(source))
+                            .environment(\.dynamicTypeSize, typeSize)
+                            .frame(width: width, alignment: .topLeading)
+                    )
+                    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 2000))
+                    window.rootViewController = host
+                    window.makeKeyAndVisible()
+                    defer { window.isHidden = true }
+                    // Allow the asynchronous Markdown parser to publish its blocks.
+                    for _ in 0..<100 {
+                        try await Task.sleep(for: .milliseconds(20))
+                        host.view.layoutIfNeeded()
+                        if tableTextViews(in: host.view).count == 10 { break }
+                    }
+                    let cells = tableTextViews(in: host.view)
+                    XCTAssertEqual(cells.count, 10)
+                    for cell in cells {
+                        let needed = cell.sizeThatFits(CGSize(width: cell.bounds.width, height: .greatestFiniteMagnitude))
+                        XCTAssertGreaterThanOrEqual(cell.bounds.height + 1, needed.height,
+                            "Cell must fit all wrapped lines at width \(width), \(typeSize), streaming=\(streaming): \(cell.text ?? "")")
+                    }
+                    let descriptions = cells.filter { $0.text.contains("既存の") || $0.text.contains("月10ドル") || $0.text.contains("Claude を") || $0.text.contains("X の") }
+                        .map { $0.convert($0.bounds, to: host.view) }
+                        .sorted { $0.minY < $1.minY }
+                    XCTAssertEqual(descriptions.count, 4)
+                    for (previous, next) in zip(descriptions, descriptions.dropFirst()) {
+                        XCTAssertLessThanOrEqual(previous.maxY, next.minY, "Table rows must not overlap")
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testNativeMarkdownFitsLongHeadingsListsAndQuotes() async throws {
+        let longText = String(repeating: "長い日本語と English の文章を折り返して表示します。", count: 8)
+        let source = """
+        # \(longText)
+
+        \(longText)
+
+        1. \(longText)
+        2. **\(longText)**
+
+        > \(longText)
+        >
+        > \(longText)
+
+        ```swift
+        let message = "長いコードも横スクロールで表示します"
+        print(message)
+        ```
+
+        末尾の文章
+        """
+        for width: CGFloat in [320, 768] {
+            for typeSize: DynamicTypeSize in [.large, .accessibility3] {
+                let host = UIHostingController(rootView:
+                    NativeMarkdownView(markdownText: source, isStreaming: true,
+                        preparsedBlocks: NativeMarkdownParser.parse(source))
+                        .environment(\.dynamicTypeSize, typeSize)
+                        .frame(width: width, alignment: .topLeading)
+                )
+                let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 2000))
+                window.rootViewController = host
+                window.makeKeyAndVisible()
+                defer { window.isHidden = true }
+                try await Task.sleep(for: .milliseconds(50))
+                host.view.layoutIfNeeded()
+                let textViews = tableTextViews(in: host.view)
+                XCTAssertFalse(textViews.isEmpty)
+                for text in textViews {
+                    let needed = text.sizeThatFits(CGSize(width: text.bounds.width, height: .greatestFiniteMagnitude))
+                    XCTAssertGreaterThanOrEqual(text.bounds.height + 1, needed.height)
+                }
+                let frames = textViews.map { $0.convert($0.bounds, to: host.view) }.sorted { $0.minY < $1.minY }
+                for (previous, next) in zip(frames, frames.dropFirst()) {
+                    XCTAssertLessThanOrEqual(previous.maxY, next.minY)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func tableTextViews(in view: UIView) -> [SelectableChatTextView] {
+        if let text = view as? SelectableChatTextView { return [text] }
+        return view.subviews.flatMap { tableTextViews(in: $0) }
+    }
+
     // Exact answer from the trigonometric-addition diagnostic export (2026-10-22).
     private static let trigonometricDiagnosticAnswer = #"""
     加法定理を三角関数の公式として、証明します。

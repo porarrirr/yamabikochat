@@ -955,7 +955,8 @@ private struct NativeCodeBlock: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
-            .frame(height: 38)
+            .padding(.vertical, 8)
+            .frame(minHeight: 38)
 
             Divider()
 
@@ -976,7 +977,7 @@ private struct NativeMarkdownTable: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: true) {
-            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
+            Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                     GridRow {
                         ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
@@ -985,7 +986,10 @@ private struct NativeMarkdownTable: View {
                                 style: .caption1,
                                 weight: rowIndex == 0 ? .semibold : .regular
                             )
-                                .frame(minWidth: 110, maxWidth: 220, alignment: .leading)
+                                // Use the same finite width during Grid measurement
+                                // and placement so wrapping determines the row height.
+                                .frame(width: 220, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .padding(9)
                                 .background(rowIndex == 0 ? Color.secondary.opacity(0.12) : Color.clear)
                                 .border(Color.secondary.opacity(0.18), width: 0.5)

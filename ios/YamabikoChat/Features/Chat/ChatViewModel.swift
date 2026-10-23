@@ -15,6 +15,7 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var speechAudioLevels = SpeechAudioLevelHistory().values
     @Published var isSending: Bool = false
     @Published private(set) var isCompacting = false
+    @Published private(set) var compactionErrorMessage: String?
     @Published var isAutoConversationRunning: Bool = false
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
@@ -247,6 +248,7 @@ final class ChatViewModel: ObservableObject {
         isCompacting = true
         isSending = true
         errorMessage = nil
+        compactionErrorMessage = nil
         activeSendTask = Task { [self] in
             defer {
                 isCompacting = false
@@ -258,6 +260,7 @@ final class ChatViewModel: ObservableObject {
                 rebuildContextUsage()
             } catch {
                 if !Task.isCancelled {
+                    compactionErrorMessage = L10n.text("コンテキストを圧縮できませんでした。もう一度お試しください。")
                     recordFailure(error)
                     DiagnosticsLogger.log("Context compaction failed", category: .chat, error: error)
                 }

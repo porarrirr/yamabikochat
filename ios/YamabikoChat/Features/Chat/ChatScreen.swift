@@ -974,6 +974,7 @@ struct ChatScreen: View {
                 HStack(spacing: 6) {
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage, isCompacting: viewModel.isCompacting,
+                                          errorMessage: viewModel.compactionErrorMessage,
                                           canCompact: viewModel.canCompactContext, compact: viewModel.compactContext)
                     }
                     composerCollapsedVoiceButton
@@ -993,6 +994,7 @@ struct ChatScreen: View {
                     Spacer(minLength: 4)
                     if let contextUsage = viewModel.visibleContextUsage {
                         ContextUsageMeter(usage: contextUsage, isCompacting: viewModel.isCompacting,
+                                          errorMessage: viewModel.compactionErrorMessage,
                                           canCompact: viewModel.canCompactContext, compact: viewModel.compactContext)
                     }
                     if showsReasoningEffortMeter {
@@ -1265,6 +1267,7 @@ struct ChatScreen: View {
         @Environment(\.appAccent) private var appAccent
         let usage: ContextUsage
         let isCompacting: Bool
+        let errorMessage: String?
         let canCompact: Bool
         let compact: () -> Void
         @State private var showsDetails = false
@@ -1315,6 +1318,12 @@ struct ChatScreen: View {
                     }
                     .disabled(!canCompact)
                     .accessibilityIdentifier("context-compaction-button")
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("context-compaction-error")
+                    }
                     Text(L10n.text("Pi で会話を要約し、以後の送信コンテキストを圧縮します。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)

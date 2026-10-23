@@ -633,6 +633,7 @@
 "推論の強さ" = "Intensidad del razonamiento";
 
 /* Manual context compaction */
+"コンテキストを圧縮できませんでした。もう一度お試しください。" = "No se pudo comprimir el contexto. Inténtalo de nuevo.";
 "Compacting…" = "Comprimiendo…";
 "Compaction" = "Compaction";
 "圧縮後の推定: %@ / %@ token" = "Estimación tras comprimir: %@ / %@ tokens";

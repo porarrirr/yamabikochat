@@ -633,6 +633,7 @@
 "推論の強さ" = "推理强度";
 
 /* Manual context compaction */
+"コンテキストを圧縮できませんでした。もう一度お試しください。" = "无法压缩上下文。请重试。";
 "Compacting…" = "正在压缩…";
 "Compaction" = "Compaction";
 "圧縮後の推定: %@ / %@ token" = "压缩后估算：%@ / %@ token";
