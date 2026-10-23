@@ -33,6 +33,15 @@ pipe is separate from TCP because iOS can reclaim a suspended listening socket w
 notifying Node (Apple TN2277). Lifecycle transitions are recorded in the runtime log.
 `npm test` covers repeated transitions, background startup, draining and active streams.
 
+Native launch and listener readiness are separate states. The Swift client retains
+the original endpoint and token as soon as launch succeeds, even if the initial
+health check times out in the background. Subsequent requests and foreground entry
+probe that same runtime. `PiNodeRunner` also rejects duplicate launches across
+clients before changing any pipes or observers; its process-wide guard remains set
+after Node exits. This prevents Node's fatal `!init_called.exchange(true)` assertion.
+`PiRuntimeStartupTests` covers timeouts, recovery, concurrent callers, preparation
+failures, and native duplicate rejection while the original runtime remains healthy.
+
 ChatGPT login and refresh use the official SIWC provider extension described in
 [CHATGPT_PLAN.md](CHATGPT_PLAN.md). SuperGrok login,
 refresh, OIDC verification, proxy headers, request sanitization, and CLI proxy routing use

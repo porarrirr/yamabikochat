@@ -356,17 +356,22 @@ actor PiAgentRuntime {
     #endif
     private let readiness: PiRuntimeReadinessConfiguration
     private let healthClient: any PiRuntimeHealthClient
+    private let startEngine: @Sendable ([String]) throws -> Void
 
     init(
         endpoint: URL? = nil,
         token: String? = nil,
         readiness: PiRuntimeReadinessConfiguration = PiRuntimeReadinessConfiguration(),
-        healthClient: any PiRuntimeHealthClient = CredentialHTTPTransport.shared
+        healthClient: any PiRuntimeHealthClient = CredentialHTTPTransport.shared,
+        startEngine: @escaping @Sendable ([String]) throws -> Void = {
+            try PiNodeRunner.startEngine(arguments: $0)
+        }
     ) {
         self.endpoint = endpoint
         self.token = token
         self.readiness = readiness
         self.healthClient = healthClient
+        self.startEngine = startEngine
     }
 
     func verifyReady() async throws {
@@ -1106,6 +1111,10 @@ actor PiAgentRuntime {
     }
 
     private func startIfNeeded(requestID: String? = nil) async throws -> (URL, String) {
+        if let startupTask {
+            DiagnosticsLogger.log("Pi runtime startup already in progress", category: .network)
+            return try await startupTask.value
+        }
         if let endpoint, let token {
             _ = try await waitUntilHealthySingleFlight(
                 endpoint: endpoint,
@@ -1116,11 +1125,6 @@ actor PiAgentRuntime {
             )
             return (endpoint, token)
         }
-        if let startupTask {
-            DiagnosticsLogger.log("Pi runtime startup already in progress", category: .network)
-            return try await startupTask.value
-        }
-
         let task = Task<(URL, String), Error> {
             let resources = Bundle(for: PiRuntimeBundleToken.self)
             guard let script = resources.url(forResource: "main", withExtension: "js") else {
@@ -1139,11 +1143,17 @@ actor PiAgentRuntime {
             )
             #if DEBUG
             let runtimeLogPath = DiagnosticsLogger.piRuntimeLogPath()
-            PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token, runtimeLogPath])
+            try self.startEngine(["node", script.path, String(port), token, runtimeLogPath])
             #else
-            PiNodeRunner.startEngine(withArguments: ["node", script.path, String(port), token])
+            try self.startEngine(["node", script.path, String(port), token])
             #endif
 
+            // Launch and readiness are separate states. A timeout (for example,
+            // while iOS suspends the listener) does not undo node_start(). Keep
+            // this identity before the first suspension point so every retry
+            // probes the same engine instead of initializing Node a second time.
+            self.endpoint = endpoint
+            self.token = token
             _ = try await self.waitUntilHealthySingleFlight(
                 endpoint: endpoint,
                 token: token,
@@ -1156,8 +1166,6 @@ actor PiAgentRuntime {
         startupTask = task
         do {
             let result = try await task.value
-            endpoint = result.0
-            token = result.1
             startupTask = nil
             return result
         } catch {

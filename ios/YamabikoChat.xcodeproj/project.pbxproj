@@ -68,6 +68,7 @@
 		1C6EAAF2473B14C5F776461C /* RelativeDateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7D208E27D2F5AC314C73D9 /* RelativeDateFormatter.swift */; };
 		1E008ECA9DD0FE0FB13EA463 /* ReasoningExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */; };
 		1ED088E445C932F7AAFD9864 /* DualAutoModelSideForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6116B1ECB916D417EE404728 /* DualAutoModelSideForm.swift */; };
+		1FDA27DCEAE25EDC2B014782 /* PiRuntimeStartupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7542F7EE4B48E35A70C5983D /* PiRuntimeStartupTests.swift */; };
 		20001ADF98A6F3994E7CA279 /* DuckDuckGoHTMLEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73FDBC095F0EFC6358C60DC3 /* DuckDuckGoHTMLEngine.swift */; };
 		2047307AD517545330CE89E6 /* SecretConversationVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8145755EAE89BCB6B545C5 /* SecretConversationVault.swift */; };
 		2189F4D4097CE74B7387FD35 /* SiriConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E360E7ED7C45B26FB3706004 /* SiriConversationTests.swift */; };
@@ -637,6 +638,7 @@
 		74B87B752F42B76EA2490112 /* SuperGrokAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperGrokAuthModels.swift; sourceTree = "<group>"; };
 		74F623A2ACDDFF6E31177245 /* PiStreamSpy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiStreamSpy.swift; sourceTree = "<group>"; };
 		7534D926F8D18EAB4B8663C2 /* GenUIToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIToolTests.swift; sourceTree = "<group>"; };
+		7542F7EE4B48E35A70C5983D /* PiRuntimeStartupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiRuntimeStartupTests.swift; sourceTree = "<group>"; };
 		761F7A75D10C4341DB0DB6E7 /* AutoConversationTurnPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationTurnPolicyTests.swift; sourceTree = "<group>"; };
 		77C00215C0194DA72B883351 /* GenUIRichDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIRichDocumentTests.swift; sourceTree = "<group>"; };
 		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
@@ -1462,6 +1464,7 @@
 				99C461CA8F55D11313C79E35 /* PCCProviderTests.swift */,
 				8901B772E7FB8E49074621C4 /* PCCSessionStoreTests.swift */,
 				EB497EA88190D3098069001F /* PiAgentGatewayTests.swift */,
+				7542F7EE4B48E35A70C5983D /* PiRuntimeStartupTests.swift */,
 				74F623A2ACDDFF6E31177245 /* PiStreamSpy.swift */,
 				9E7DA902C4E31F43AC67F6DE /* ProjectFeatureTests.swift */,
 				93B24D334792F81938E47527 /* ProjectWorkspaceStoreTests.swift */,
@@ -1949,6 +1952,7 @@
 				C307BED0FA7D787C15B3C283 /* PCCProviderTests.swift in Sources */,
 				A79DBB13CBAB2882630D6C92 /* PCCSessionStoreTests.swift in Sources */,
 				576D8A6C2037624C4C6D4F3F /* PiAgentGatewayTests.swift in Sources */,
+				1FDA27DCEAE25EDC2B014782 /* PiRuntimeStartupTests.swift in Sources */,
 				85EB708053705438A3E8BE95 /* PiStreamSpy.swift in Sources */,
 				D3F24BA15CE46220C3494CF3 /* ProjectFeatureTests.swift in Sources */,
 				6B3E0EE813C43DD62728CF0E /* ProjectWorkspaceStoreTests.swift in Sources */,
