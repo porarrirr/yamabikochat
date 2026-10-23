@@ -1200,7 +1200,7 @@ final class SettingsViewModel: ObservableObject {
     func loginSuperGrokWithBrowser() async {
         guard let repository = requireRepository(action: "supergrok_login_browser") else { return }
         isSuperGrokAuthActionRunning = true
-        statusMessage = L10n.text("SuperGrokログインを開始しました")
+        statusMessage = L10n.text("xAIログインを開始しました")
         errorMessage = nil
         defer { isSuperGrokAuthActionRunning = false }
         let result = await repository.loginSuperGrokWithBrowser()
@@ -1208,7 +1208,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             superGrokAuthState = state
             superGrokEmailInput = state.email ?? ""
-            statusMessage = L10n.text("SuperGrokにログインしました")
+            statusMessage = L10n.text("xAIにログインしました")
         case let .failure(error):
             recordFailure(error)
         }
@@ -1217,7 +1217,7 @@ final class SettingsViewModel: ObservableObject {
     func loginSuperGrokWithDeviceCode() async {
         guard let repository = requireRepository(action: "supergrok_login_device_code") else { return }
         isSuperGrokAuthActionRunning = true
-        statusMessage = L10n.text("SuperGrok Device Code ログインを開始しました")
+        statusMessage = L10n.text("xAI Device Code ログインを開始しました")
         errorMessage = nil
         defer { isSuperGrokAuthActionRunning = false }
         let result = await repository.loginSuperGrokWithDeviceCode()
@@ -1225,7 +1225,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             superGrokAuthState = state
             superGrokEmailInput = state.email ?? ""
-            statusMessage = L10n.text("SuperGrokにログインしました")
+            statusMessage = L10n.text("xAIにログインしました")
         case let .failure(error):
             recordFailure(error)
         }
@@ -1242,11 +1242,11 @@ final class SettingsViewModel: ObservableObject {
             superGrokAuthState = state
             superGrokEmailInput = ""
             statusMessage = state.revocationUnconfirmed
-                ? L10n.text("この端末からログアウトしました。SuperGrokの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
-                : L10n.text("SuperGrokの接続を解除してログアウトしました")
+                ? L10n.text("この端末からログアウトしました。xAIの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
+                : L10n.text("xAIの接続を解除してログアウトしました")
         case let .failure(error):
             recordFailure(error)
-            statusMessage = L10n.text("SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
+            statusMessage = L10n.text("xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。")
         }
     }
 
@@ -1259,7 +1259,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             superGrokAuthState = state
             superGrokEmailInput = state.email ?? ""
-            statusMessage = L10n.text("SuperGrokトークンを更新しました")
+            statusMessage = L10n.text("xAIトークンを更新しました")
         case let .failure(error):
             recordFailure(error)
         }

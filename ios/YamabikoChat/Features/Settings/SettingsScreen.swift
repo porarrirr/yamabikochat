@@ -1063,7 +1063,7 @@ struct SettingsDetailScreen: View {
     private var superGrokProviderSettingsSection: some View {
         Group {
             if currentProviderKey == "SUPERGROK" {
-                Section("SuperGrok Settings") {
+                Section("xAI Settings") {
                     Text("Endpoint: \(AppConstants.defaultSuperGrokBaseURL.absoluteString)")
                         .font(.caption)
                         .textSelection(.enabled)
@@ -1102,7 +1102,7 @@ struct SettingsDetailScreen: View {
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("SuperGrok")
+                        Text("xAI")
                             .font(.headline)
                         Label(
                             viewModel.superGrokAuthState.isLoggedIn ? "接続済み" : "未接続",
@@ -1125,7 +1125,7 @@ struct SettingsDetailScreen: View {
                     Task { await viewModel.loginSuperGrokWithBrowser() }
                 } label: {
                     HStack(spacing: 10) {
-                        Text(viewModel.superGrokAuthState.isLoggedIn ? "SuperGrokに再接続" : "SuperGrokに接続")
+                        Text(viewModel.superGrokAuthState.isLoggedIn ? "xAIに再接続" : "xAIに接続")
                             .font(.subheadline.weight(.semibold))
                             .multilineTextAlignment(.center)
                         Image(systemName: "arrow.up.right")
@@ -1469,7 +1469,7 @@ struct SettingsDetailScreen: View {
                     set: { viewModel.setDefaultModel($0) }
                 ))
             } else if isSuperGrokProvider {
-                Picker("SuperGrok Model", selection: Binding(
+                Picker("xAI Model", selection: Binding(
                     get: { viewModel.settings.defaultModel },
                     set: { viewModel.setDefaultModel($0) }
                 )) {

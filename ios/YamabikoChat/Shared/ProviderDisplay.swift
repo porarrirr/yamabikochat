@@ -37,7 +37,7 @@ enum ProviderCatalog {
         ProviderDisplay(key: "GEMINI", title: "Google Gemini"),
         ProviderDisplay(key: "OPENROUTER", title: "OpenRouter"),
         ProviderDisplay(key: "CODEX_AUTH", title: "ChatGPT plan"),
-        ProviderDisplay(key: "SUPERGROK", title: "SuperGrok"),
+        ProviderDisplay(key: "SUPERGROK", title: "xAI"),
         ProviderDisplay(key: "APPLE_INTELLIGENCE", title: "Apple Intelligence"),
         ProviderDisplay(key: "OPENAI_COMPAT", title: "Custom Endpoint"),
         ProviderDisplay(key: "SARASHINA", title: "Sarashina")

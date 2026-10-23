@@ -64,7 +64,7 @@ final class SettingsViewModelTests: XCTestCase {
         let viewModel = SettingsViewModel()
         viewModel.bind(repository: fixture.repository, credentialStore: credentials)
         await viewModel.logoutSuperGrok()
-        XCTAssertEqual(viewModel.statusMessage, L10n.text("SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。"))
+        XCTAssertEqual(viewModel.statusMessage, L10n.text("xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。"))
         XCTAssertNil(try credentials.readSecret(key: "pi_oauth_supergrok_v1"))
     }
 

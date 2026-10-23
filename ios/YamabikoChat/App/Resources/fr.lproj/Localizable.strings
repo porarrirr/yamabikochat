@@ -639,7 +639,7 @@
 "通常のチャットで compaction を実行してください。" = "Lancez la compression dans une conversation standard.";
 "会話が変更されたため compaction を保存しませんでした。" = "La conversation a changé. La compression n’a pas été enregistrée.";
 
-"この端末からログアウトしました。SuperGrokの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Déconnexion effectuée sur cet appareil. La révocation SuperGrok n’a pas pu être confirmée. Vérifiez les applications connectées et les sessions dans les paramètres de votre compte Grok.";
+"この端末からログアウトしました。xAIの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Déconnexion effectuée sur cet appareil. La révocation xAI n’a pas pu être confirmée. Vérifiez les applications connectées et les sessions dans les paramètres de votre compte Grok.";
 
-"SuperGrokの接続を解除してログアウトしました" = "Connexion SuperGrok révoquée et déconnexion effectuée";
-"SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "La déconnexion de SuperGrok n’a pas pu être terminée. Quittez l’app et vérifiez les applications connectées et les sessions dans les paramètres de votre compte Grok.";
+"xAIの接続を解除してログアウトしました" = "Connexion xAI révoquée et déconnexion effectuée";
+"xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "La déconnexion de xAI n’a pas pu être terminée. Quittez l’app et vérifiez les applications connectées et les sessions dans les paramètres de votre compte Grok.";

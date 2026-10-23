@@ -690,7 +690,7 @@
 "通常のチャットで compaction を実行してください。" = "Run compaction in a standard chat.";
 "会話が変更されたため compaction を保存しませんでした。" = "The conversation changed, so compaction was not saved.";
 
-"この端末からログアウトしました。SuperGrokの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Signed out on this device. SuperGrok disconnection could not be confirmed. Review connected apps and sessions in your Grok account settings.";
+"この端末からログアウトしました。xAIの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Signed out on this device. xAI disconnection could not be confirmed. Review connected apps and sessions in your Grok account settings.";
 
-"SuperGrokの接続を解除してログアウトしました" = "Disconnected SuperGrok and signed out";
-"SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "SuperGrok sign-out could not be completed. Quit the app and review connected apps and sessions in your Grok account settings.";
+"xAIの接続を解除してログアウトしました" = "Disconnected xAI and signed out";
+"xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "xAI sign-out could not be completed. Quit the app and review connected apps and sessions in your Grok account settings.";

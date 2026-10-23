@@ -642,7 +642,7 @@
 "通常のチャットで compaction を実行してください。" = "Ejecuta la compresión en un chat normal.";
 "会話が変更されたため compaction を保存しませんでした。" = "La conversación cambió y no se guardó la compresión.";
 
-"この端末からログアウトしました。SuperGrokの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Se cerró la sesión en este dispositivo. No se pudo confirmar la desconexión de SuperGrok. Revisa las aplicaciones conectadas y las sesiones en la configuración de tu cuenta Grok.";
+"この端末からログアウトしました。xAIの接続解除を確認できませんでした。Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "Se cerró la sesión en este dispositivo. No se pudo confirmar la desconexión de xAI. Revisa las aplicaciones conectadas y las sesiones en la configuración de tu cuenta Grok.";
 
-"SuperGrokの接続を解除してログアウトしました" = "Se revocó la conexión de SuperGrok y se cerró la sesión";
-"SuperGrokのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "No se pudo completar el cierre de sesión de SuperGrok. Cierra la app y revisa las aplicaciones conectadas y las sesiones en la configuración de tu cuenta de Grok.";
+"xAIの接続を解除してログアウトしました" = "Se revocó la conexión de xAI y se cerró la sesión";
+"xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "No se pudo completar el cierre de sesión de xAI. Cierra la app y revisa las aplicaciones conectadas y las sesiones en la configuración de tu cuenta de Grok.";

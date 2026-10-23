@@ -21,7 +21,7 @@ enum ShortcutProviderAppEnum: String, AppEnum {
         .gemini: DisplayRepresentation(title: "Google Gemini"),
         .openRouter: DisplayRepresentation(title: "OpenRouter"),
         .openCodeGo: DisplayRepresentation(title: "OpenCode Go"),
-        .superGrok: DisplayRepresentation(title: "SuperGrok"),
+        .superGrok: DisplayRepresentation(title: "xAI"),
         .clinePass: DisplayRepresentation(title: "Cline Pass"),
         .alibabaCodingPlan: DisplayRepresentation(title: "Alibaba Coding Plan"),
         .zai: DisplayRepresentation(title: "Z.ai Coding Plan"),
