@@ -129,6 +129,7 @@ struct AppSettings: Codable, FetchableRecord, MutablePersistableRecord, Equatabl
     var pythonToolEnabled: Bool
     var genUIToolEnabled: Bool
 
+    // Retained for compatibility with existing persisted settings; appearance uses themeColor.
     var dynamicColorEnabled: Bool
     var themeColor: String
     var themeMode: String

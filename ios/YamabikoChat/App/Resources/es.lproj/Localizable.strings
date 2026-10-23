@@ -77,7 +77,6 @@
 "コピー済み" = "Copiado";
 "ダウンロード" = "Descargar";
 "サポート外のファイル形式です。" = "Formato de archivo no compatible.";
-"システムカラーを使用 (iOS)" = "Usar colores del sistema (iOS)";
 "システムプロンプト" = "Prompt del sistema";
 "システムプロンプトプリセットの削除に失敗しました" = "Error al eliminar preset de prompt del sistema";
 "システムプロンプトプリセットの保存に失敗しました" = "Error al guardar preset de prompt del sistema";

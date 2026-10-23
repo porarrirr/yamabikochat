@@ -81,8 +81,15 @@ Build and signing should be completed on macOS.
 
 ## CI
 - repo root `.github/workflows/ios-ipa.yml`: unsigned IPA build workflow (`workflow_dispatch` and iOS-related pushes; uploads artifact and publishes/updates a prerelease asset)
-- repo root `.github/workflows/ios-ci.yml`: macOS build/test (`xcodegen` + `xcodebuild`)
+- repo root `.github/workflows/ios-ci.yml`: runs on iOS-related PRs and pushes to `main`; checks provider contracts, Pi, GenUI DOM, Python, packaging scripts, and iOS unit tests, then builds an unsigned IPA. Test result bundles are uploaded even when tests fail. A newer run cancels an older run on the same branch.
 - `ios-testflight.yml`: manual TestFlight upload workflow (requires signing/App Store Connect secrets)
+
+All three iOS workflows use GitHub's `xcode-27` runner image with Xcode 27.0
+and the iOS 27.0 SDK, matching `app-store-build.env`. The `macos-26` image
+only contains Xcode 26 and cannot build this project. The `xcode-27` image
+is currently a public preview; see the [official image announcement](https://github.com/actions/runner-images/issues/14404).
+Python wheel cache keys include the runner architecture to avoid reusing
+incompatible simulator wheels across Intel and Apple Silicon runners.
 
 ## Siri / Apple Intelligence
 

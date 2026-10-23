@@ -586,11 +586,6 @@ struct SettingsDetailScreen: View {
 
     private var appearanceSection: some View {
         Section("外観") {
-            Toggle("システムカラーを使用 (iOS)", isOn: Binding(
-                get: { viewModel.settings.dynamicColorEnabled },
-                set: { viewModel.settings.dynamicColorEnabled = $0 }
-            ))
-
             Picker("表示モード", selection: Binding(
                 get: {
                     let normalized = viewModel.settings.themeMode.uppercased()
@@ -604,19 +599,17 @@ struct SettingsDetailScreen: View {
             }
             .pickerStyle(.segmented)
 
-            if !viewModel.settings.dynamicColorEnabled {
-                Picker("アクセントカラー", selection: Binding(
-                    get: {
-                        let normalized = viewModel.settings.themeColor.uppercased()
-                        return themeColorOptions.contains(where: { $0.key == normalized })
-                            ? normalized
-                            : "BLUE_PURPLE"
-                    },
-                    set: { viewModel.settings.themeColor = $0.uppercased() }
-                )) {
-                    ForEach(themeColorOptions) { option in
-                        Text(option.title).tag(option.key)
-                    }
+            Picker("アクセントカラー", selection: Binding(
+                get: {
+                    let normalized = viewModel.settings.themeColor.uppercased()
+                    return themeColorOptions.contains(where: { $0.key == normalized })
+                        ? normalized
+                        : "BLUE_PURPLE"
+                },
+                set: { viewModel.settings.themeColor = $0.uppercased() }
+            )) {
+                ForEach(themeColorOptions) { option in
+                    Text(option.title).tag(option.key)
                 }
             }
 

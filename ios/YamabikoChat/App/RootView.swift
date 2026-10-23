@@ -50,7 +50,6 @@ struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var isCompactDrawerOpen = false
-    @State private var dynamicColorEnabled = true
     @State private var themeColor = "BLUE_PURPLE"
     @State private var themeMode = "SYSTEM"
     @State private var keepSidebarAfterSecretDiscard = false
@@ -282,10 +281,6 @@ struct RootView: View {
     }
 
     private var resolvedTintColor: Color {
-        if dynamicColorEnabled {
-            return Color(uiColor: .systemBlue)
-        }
-
         switch themeColor.uppercased() {
         case "BLUE":
             return Color(uiColor: .systemBlue)
@@ -307,7 +302,6 @@ struct RootView: View {
     }
 
     private func applyAppearance(_ settings: AppSettings) {
-        dynamicColorEnabled = settings.dynamicColorEnabled
         themeColor = settings.themeColor
         themeMode = settings.themeMode
     }
