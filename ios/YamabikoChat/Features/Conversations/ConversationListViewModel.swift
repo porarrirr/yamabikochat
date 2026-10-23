@@ -106,10 +106,20 @@ final class ConversationListViewModel: ObservableObject {
         }
     }
 
-    func createProject(title: String, instructions: String?) -> Int64? {
+    func createProject(
+        title: String,
+        instructions: String?,
+        iconName: String = "folder.fill",
+        colorHex: String = "#3A7AFE"
+    ) -> Int64? {
         guard let repository else { return nil }
         do {
-            let id = try repository.createProject(title: title, instructions: instructions)
+            let id = try repository.createProject(
+                title: title,
+                instructions: instructions,
+                iconName: iconName,
+                colorHex: colorHex
+            )
             errorMessage = nil
             return id
         } catch {

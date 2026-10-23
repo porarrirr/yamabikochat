@@ -225,6 +225,21 @@ final class ProjectFeatureTests: XCTestCase {
         XCTAssertEqual(updatedConv?.systemPrompt, "更新後の指示")
     }
 
+    func testCreateProjectPersistsSelectedAppearance() throws {
+        let fixture = try makeFixture()
+        let projectId = try fixture.repository.createProject(
+            title: "デザイン",
+            instructions: nil,
+            iconName: "paintpalette.fill",
+            colorHex: "#AF52DE"
+        )
+
+        let project = try XCTUnwrap(fixture.repository.fetchProject(id: projectId))
+        XCTAssertEqual(project.title, "デザイン")
+        XCTAssertEqual(project.iconName, "paintpalette.fill")
+        XCTAssertEqual(project.colorHex, "#AF52DE")
+    }
+
     func testUpdateProjectTitleAndProperties() throws {
         let fixture = try makeFixture()
         let projectId = try fixture.repository.createProject(title: "旧タイトル", instructions: "指示")

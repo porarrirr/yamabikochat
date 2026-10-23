@@ -46,8 +46,13 @@ struct ProjectListScreen: View {
         }
         .background(Color(uiColor: .amoledSystemBackground).ignoresSafeArea())
         .sheet(isPresented: $isCreateProjectPresented) {
-            CreateProjectSheet(viewModel: viewModel) { title, instructions in
-                guard let projectId = viewModel.createProject(title: title, instructions: instructions) else {
+            ProjectEditorSheet(viewModel: viewModel, mode: .create) { title, instructions, iconName, colorHex in
+                guard let projectId = viewModel.createProject(
+                    title: title,
+                    instructions: instructions,
+                    iconName: iconName,
+                    colorHex: colorHex
+                ) else {
                     return false
                 }
                 onSelectProject(projectId)
@@ -71,7 +76,7 @@ struct ProjectListScreen: View {
                 instructions: project.instructions,
                 updatedAtMs: project.updatedAtMs
             )
-            EditProjectSheet(project: chatProject, viewModel: viewModel) { title, instructions, iconName, colorHex in
+            ProjectEditorSheet(viewModel: viewModel, mode: .edit(chatProject)) { title, instructions, iconName, colorHex in
                 viewModel.updateProject(
                     id: project.id,
                     title: title,

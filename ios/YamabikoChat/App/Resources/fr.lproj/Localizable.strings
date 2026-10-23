@@ -254,6 +254,10 @@
 "数式" = "Formules";
 "青" = "Bleu";
 "青紫" = "Bleu violet";
+"赤" = "Rouge";
+"インディゴ" = "Indigo";
+"グレー" = "Gris";
+"紫" = "Violet";
 "設定" = "Paramètres";
 "設定ファイルを取り込む" = "Importer le fichier de configuration";
 "設定画面の初期化が完了していません。画面を開き直して再試行してください。" = "L'initialisation de l'écran des paramètres n'est pas encore terminée. Veuillez le rouvrir et réessayer.";

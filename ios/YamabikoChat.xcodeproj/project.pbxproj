@@ -179,6 +179,7 @@
 		761E57237B59976DB4235172 /* SecretChatCaptureProtectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42CB6908A06B5DC6F7FB155B /* SecretChatCaptureProtectionTests.swift */; };
 		7644E1BF8ED11231C2A18DA0 /* AppStoreScreenshotRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A07E6645A76A58193A146DE /* AppStoreScreenshotRouting.swift */; };
 		771BB106CD4173C99208AE4C /* SettingsFormHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652A626C556E53B0EB120BFD /* SettingsFormHelpers.swift */; };
+		77318E9D4740A079F773E6B4 /* ProjectEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E76E1D03B923BFA067D819A /* ProjectEditorSheet.swift */; };
 		77B7FED703C2BBAC4947F8E8 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65438877F0411D1956AB70FB /* AppContainer.swift */; };
 		77EFC73B14FE3A57CAF6B1C3 /* AutoConversationFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC763DA5C2E9F9656E06CA07 /* AutoConversationFormatter.swift */; };
 		77F1F88CB55C15BCD7693D3E /* ConversationEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DA624B98787D65EDBC5E3 /* ConversationEntity.swift */; };
@@ -216,7 +217,6 @@
 		9621F9E7E3AD0FA8C8261E37 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CB427210D89DB2E91F4D299 /* PrivacyInfo.xcprivacy */; };
 		962D63DC04F87D3F8083C055 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFD3A6F921B1D50CBE1BFA3 /* KeychainStore.swift */; };
 		98749CFF168F962BDDDD037B /* SettingsStringHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D9D7267F7551E4A0918A48 /* SettingsStringHelpers.swift */; };
-		9880DB8288477117138EAD91 /* EditProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DB4ABDB7715C4B242909D0 /* EditProjectSheet.swift */; };
 		99469D4CB0E428295EDF37E7 /* ModelSelectionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C65A7CDA7152349C0FE403 /* ModelSelectionRow.swift */; };
 		9956FF9B0D965DD8D01BA6BA /* SvgPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BD71648A1094DBA64CF4949 /* SvgPreviewCard.swift */; };
 		995F81C7CFF36042E58AE02C /* SecretChatCaptureProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B77F499A6ED98997FCE297 /* SecretChatCaptureProtection.swift */; };
@@ -512,6 +512,7 @@
 		2DDAE401C033767F625DD456 /* GenUIDemoFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIDemoFixture.swift; sourceTree = "<group>"; };
 		2E0CA7213C1361207E3BA5F2 /* ProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderError.swift; sourceTree = "<group>"; };
 		2E5A854C62DD0437475F9549 /* reference-icons.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "reference-icons.js"; sourceTree = "<group>"; };
+		2E76E1D03B923BFA067D819A /* ProjectEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectEditorSheet.swift; sourceTree = "<group>"; };
 		2ECE967CBAB3BDDC5E028715 /* ReasoningExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningExtractionTests.swift; sourceTree = "<group>"; };
 		2ECF80CEF579F07A3B1E23A6 /* ShortcutModelOptionsBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutModelOptionsBuilder.swift; sourceTree = "<group>"; };
 		2F24E32C72E6148FCB826148 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -621,7 +622,6 @@
 		74F623A2ACDDFF6E31177245 /* PiStreamSpy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiStreamSpy.swift; sourceTree = "<group>"; };
 		7534D926F8D18EAB4B8663C2 /* GenUIToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIToolTests.swift; sourceTree = "<group>"; };
 		761F7A75D10C4341DB0DB6E7 /* AutoConversationTurnPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConversationTurnPolicyTests.swift; sourceTree = "<group>"; };
-		76DB4ABDB7715C4B242909D0 /* EditProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProjectSheet.swift; sourceTree = "<group>"; };
 		77C00215C0194DA72B883351 /* GenUIRichDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenUIRichDocumentTests.swift; sourceTree = "<group>"; };
 		7824746250F630294D76127F /* GeminiModelUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtilsTests.swift; sourceTree = "<group>"; };
 		7AFADAD85FDF09DED54072D8 /* GeminiModelUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiModelUtils.swift; sourceTree = "<group>"; };
@@ -924,8 +924,8 @@
 			children = (
 				3BB73A6E778AA23087EEB852 /* ConversationListScreen.swift */,
 				D6012B61691A11858B0918E5 /* ConversationListViewModel.swift */,
-				76DB4ABDB7715C4B242909D0 /* EditProjectSheet.swift */,
 				57126E28072581AA33F688BA /* ProjectDetailScreen.swift */,
+				2E76E1D03B923BFA067D819A /* ProjectEditorSheet.swift */,
 				30C87143D0BE6FBCA48B6232 /* ProjectInstructionsSheet.swift */,
 				53CFA1C86257D12702D6BAFB /* ProjectListScreen.swift */,
 			);
@@ -2049,7 +2049,6 @@
 				63CF0C65FD8E7E330AA43B05 /* DualModeOverridesForm.swift in Sources */,
 				1B328A998EDC00F0006847E0 /* DualModeSettingsSection.swift in Sources */,
 				20001ADF98A6F3994E7CA279 /* DuckDuckGoHTMLEngine.swift in Sources */,
-				9880DB8288477117138EAD91 /* EditProjectSheet.swift in Sources */,
 				2543F64F4EDA66E93F6AC8C0 /* FederatedSearchEngine.swift in Sources */,
 				675B831CC0D122711E3DD7F6 /* FetchUrlTool.swift in Sources */,
 				D47A3DA9EA4B8C62A4554CD6 /* GeminiModelCatalog.swift in Sources */,
@@ -2115,6 +2114,7 @@
 				10FF1A71E46475590469FFC7 /* PiNodeRunner.mm in Sources */,
 				38A9E6E51748DE853981B7CA /* PinnedListSearch.swift in Sources */,
 				333522FBE741F1A6684D3A53 /* ProjectDetailScreen.swift in Sources */,
+				77318E9D4740A079F773E6B4 /* ProjectEditorSheet.swift in Sources */,
 				F3D33D7954F9EF5403FE3B31 /* ProjectInstructionsSheet.swift in Sources */,
 				A1BE8E825189F03FFCE98E7C /* ProjectListScreen.swift in Sources */,
 				759BE17E41136B33EF80D284 /* ProjectWorkspaceStore.swift in Sources */,

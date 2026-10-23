@@ -441,12 +441,22 @@ final class ChatRepository {
         )
     }
 
-    func createProject(title: String, instructions: String?) throws -> Int64 {
+    func createProject(
+        title: String,
+        instructions: String?,
+        iconName: String = "folder.fill",
+        colorHex: String = "#3A7AFE"
+    ) throws -> Int64 {
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedTitle.isEmpty else {
             throw ProviderClientError.parseFailure(L10n.text("プロジェクト名を入力してください。"))
         }
-        return try conversations.createProject(title: normalizedTitle, instructions: instructions)
+        return try conversations.createProject(
+            title: normalizedTitle,
+            instructions: instructions,
+            iconName: iconName,
+            colorHex: colorHex
+        )
     }
 
     func fetchProject(id: Int64) throws -> ChatProject? {

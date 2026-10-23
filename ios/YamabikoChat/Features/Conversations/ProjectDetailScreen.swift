@@ -111,7 +111,7 @@ struct ProjectDetailScreen: View {
                     instructions: project.instructions,
                     updatedAtMs: project.updatedAtMs
                 )
-                EditProjectSheet(project: chatProject, viewModel: viewModel) { title, instructions, iconName, colorHex in
+                ProjectEditorSheet(viewModel: viewModel, mode: .edit(chatProject)) { title, instructions, iconName, colorHex in
                     viewModel.updateProject(
                         id: project.id,
                         title: title,

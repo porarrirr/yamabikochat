@@ -221,6 +221,25 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.selectedProjectId)
     }
 
+    func testCreateProjectPassesAppearanceToRepository() throws {
+        let repository = try makeFixture()
+        let viewModel = ConversationListViewModel()
+        viewModel.bind(repository: repository)
+
+        let projectId = try XCTUnwrap(
+            viewModel.createProject(
+                title: "Project A",
+                instructions: nil,
+                iconName: "paintpalette.fill",
+                colorHex: "#FF9500"
+            )
+        )
+
+        let project = try XCTUnwrap(repository.fetchProject(id: projectId))
+        XCTAssertEqual(project.iconName, "paintpalette.fill")
+        XCTAssertEqual(project.colorHex, "#FF9500")
+    }
+
     private func makeFixture() throws -> ChatRepository {
         let dbQueue = try DatabaseQueue()
         try AppDatabase.migrator.migrate(dbQueue)

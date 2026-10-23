@@ -217,6 +217,10 @@
 "数式" = "Fórmulas";
 "青" = "Azul";
 "青紫" = "Azul púrpura";
+"赤" = "Rojo";
+"インディゴ" = "Índigo";
+"グレー" = "Gris";
+"紫" = "Púrpura";
 "設定" = "Configuración";
 "設定ファイルを取り込む" = "Importar archivo de configuración";
 "設定画面の初期化が完了していません。画面を開き直して再試行してください。" = "設定画面の初期化が完了していません。画面を開き直して再試行してください。";

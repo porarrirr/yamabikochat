@@ -217,6 +217,10 @@
 "数式" = "Math";
 "青" = "Blue";
 "青紫" = "Blue Purple";
+"赤" = "Red";
+"インディゴ" = "Indigo";
+"グレー" = "Gray";
+"紫" = "Purple";
 "設定" = "Settings";
 "設定ファイルを取り込む" = "Import settings file";
 "設定画面の初期化が完了していません。画面を開き直して再試行してください。" = "Settings screen is not initialized yet. Reopen it and try again.";
