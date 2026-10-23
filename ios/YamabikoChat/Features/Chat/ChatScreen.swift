@@ -573,7 +573,7 @@ struct ChatScreen: View {
                     .padding(.top, 5)
             }
 
-            if let error = viewModel.errorMessage {
+            if let error = viewModel.visibleErrorMessage {
                 ChatErrorToast(
                     formatted: UserFacingErrorFormatter.format(error),
                     onDismiss: { viewModel.clearErrorMessage() }
