@@ -47,13 +47,19 @@ struct PythonSandboxFiles: Sendable {
 
     func read(workspace: URL) throws -> [PythonSandboxFile] {
         let manager = FileManager.default
+        // Enumeration resolves aliases such as /var -> /private/var on iOS.
+        // Normalize both root and entries before stripping the workspace prefix.
+        let workspace = workspace.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = workspace.path + "/"
         guard let enumerator = manager.enumerator(at: workspace, includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey, .fileSizeKey]) else { throw PythonToolError.invalidArtifactPath }
         var files: [PythonSandboxFile] = []
         var total: Int64 = 0
         for case let url as URL in enumerator {
             let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey, .fileSizeKey])
             guard values.isSymbolicLink != true else { throw PythonToolError.invalidArtifactPath }
-            let relative = String(url.path.dropFirst(workspace.path.count + 1))
+            let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard path.hasPrefix(prefix) else { throw PythonToolError.invalidArtifactPath }
+            let relative = String(path.dropFirst(prefix.count))
             if values.isDirectory == true { files.append(PythonSandboxFile(path: relative, data: nil)); continue }
             guard values.isRegularFile == true, Int64(values.fileSize ?? 0) <= maximumFileBytes else { throw PythonToolError.resourceLimitExceeded("Invalid or oversized workspace file.") }
             total += Int64(values.fileSize ?? 0)

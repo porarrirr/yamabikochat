@@ -96,6 +96,34 @@ final class PythonIsolationTests: XCTestCase {
         XCTAssertThrowsError(try policy.commit([], workspace: root, baseline: baseline))
         XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("keep.txt")), "editor change")
     }
+
+    func testWorkspaceSnapshotsKeepRelativePathsAcrossAliasedRootsAndRepeatedCommits() throws {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("python-paths-\(UUID())")
+        let physical = root.appendingPathComponent("physical-workspaces", isDirectory: true)
+        let alias = root.appendingPathComponent("alias", isDirectory: true)
+        try manager.createDirectory(at: physical, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        try manager.createSymbolicLink(at: alias, withDestinationURL: physical)
+        let sessions = PythonSessionStore(rootOverride: alias)
+        let paths = try sessions.prepare(sessionID: "stable-paths")
+        let editor = EditorWorkspaceStore(rootOverride: alias)
+        try editor.withWorkspace(sessionID: "stable-paths") { workspace in
+            try manager.createDirectory(at: workspace.appendingPathComponent("audit"), withIntermediateDirectories: true)
+            try Data("日本語 probe".utf8).write(to: workspace.appendingPathComponent("audit/probe.txt"))
+        }
+
+        let policy = PythonSandboxFiles()
+        for _ in 0..<6 {
+            let baseline = try policy.read(workspace: paths.workspace)
+            XCTAssertEqual(baseline.map(\.path), ["audit", "audit/probe.txt", "outputs"])
+            XCTAssertEqual(try sessions.workspaceUsage(in: paths).maximumDepth, 2)
+            try policy.commit(baseline, workspace: paths.workspace, baseline: baseline)
+            try editor.withWorkspace(sessionID: "stable-paths") { workspace in
+                XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("audit/probe.txt"), encoding: .utf8), "日本語 probe")
+            }
+        }
+    }
 }
 
 private final class PythonNetworkCanary: @unchecked Sendable {

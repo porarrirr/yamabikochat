@@ -2,6 +2,36 @@ import XCTest
 @testable import YamabikoChat
 
 final class PythonRuntimeTests: XCTestCase {
+    func testConsecutivePythonCallsAndEditorKeepWorkspacePathsStable() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("python-path-continuity-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = PythonSessionStore(rootOverride: root)
+        let worker = PythonWorker(sessions: sessions, timeoutSeconds: 30)
+        let first = try await worker.execute(sessionID: "continuity", code: """
+        from pathlib import Path
+        marker = 'persistent'
+        Path('/workspace/audit').mkdir(exist_ok=True)
+        Path('/workspace/audit/probe.txt').write_text('original')
+        """, reset: true, attachmentPaths: [])
+        XCTAssertEqual(first.status, "ok", first.error?.traceback ?? first.stderr)
+        let editor = EditorWorkspaceStore(rootOverride: root)
+        for index in 0..<6 {
+            try editor.withWorkspace(sessionID: "continuity") { workspace in
+                XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("audit/probe.txt")), "original")
+                try Data("editor-\(index)".utf8).write(to: workspace.appendingPathComponent("editor.txt"))
+            }
+            let response = try await worker.execute(sessionID: "continuity", code: """
+            assert marker == 'persistent'
+            assert Path('/workspace/audit/probe.txt').read_text() == 'original'
+            assert Path('audit/probe.txt').read_text() == 'original'
+            assert Path('/workspace/editor.txt').read_text() == 'editor-\(index)'
+            assert list(Path('/workspace').rglob('probe.txt')) == [Path('/workspace/audit/probe.txt')]
+            """, reset: false, attachmentPaths: [])
+            XCTAssertEqual(response.status, "ok", response.error?.traceback ?? response.stderr)
+        }
+        await worker.resetSession(sessionID: "continuity")
+    }
+
     func testEmbeddedScientificPackagesRenderPNG() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("python-scientific-\(UUID().uuidString)", isDirectory: true)

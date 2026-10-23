@@ -102,8 +102,10 @@ final class PythonSessionStore: @unchecked Sendable {
     }
 
     func workspaceUsage(in paths: PythonSessionPaths) throws -> PythonWorkspaceUsage {
+        let workspace = paths.workspace.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = workspace.path + "/"
         guard let enumerator = fileManager.enumerator(
-            at: paths.workspace,
+            at: workspace,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
             options: [],
             errorHandler: { _, _ in false }
@@ -115,7 +117,9 @@ final class PythonSessionStore: @unchecked Sendable {
         var largestFileBytes: Int64 = 0
         var maximumDepth = 0
         for case let url as URL in enumerator {
-            let relative = url.path.replacingOccurrences(of: paths.workspace.path + "/", with: "")
+            let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard path.hasPrefix(prefix) else { throw PythonToolError.invalidArtifactPath }
+            let relative = String(path.dropFirst(prefix.count))
             maximumDepth = max(maximumDepth, relative.split(separator: "/").count)
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true else { continue }
