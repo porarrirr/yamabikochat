@@ -169,12 +169,7 @@ struct ChatComposerTextView: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
-        uiView.prepareForMeasurement(width: width)
-        let fittingSize = uiView.textView.sizeThatFits(
-            CGSize(width: width, height: .greatestFiniteMagnitude)
-        )
-        let lineHeight = uiView.textView.font?.lineHeight ?? 19
-        return CGSize(width: width, height: min(max(fittingSize.height, lineHeight), lineHeight * 8))
+        return uiView.measuredSize(for: width)
     }
 
     private func configure(_ container: ComposerContainerView, context: Context, placeCursorAtEnd: Bool) {
@@ -339,6 +334,7 @@ struct ChatComposerTextView: UIViewRepresentable {
 
     final class ComposerContainerView: UIView {
         let textView = ComposerTextView()
+        private lazy var measurementTextView = ComposerTextView()
         var onMoveToWindow: (() -> Void)?
         private let iconView = UIImageView()
         private let selectionLabel = UILabel()
@@ -403,12 +399,35 @@ struct ChatComposerTextView: UIViewRepresentable {
             return ceil(size.width)
         }
 
-        func prepareForMeasurement(width: CGFloat) {
-            guard width.isFinite, width > 0 else { return }
-            let measurementHeight = max(bounds.height, textView.font?.lineHeight ?? 19)
-            bounds.size = CGSize(width: width, height: measurementHeight)
-            setNeedsLayout()
-            layoutIfNeeded()
+        func measuredSize(for width: CGFloat) -> CGSize {
+            guard width.isFinite, width > 0 else { return .zero }
+            // SwiftUI probes several widths while laying out the keyboard transition.
+            // Never change the mounted view's bounds or force layout from sizeThatFits:
+            // that can invalidate the hosting stack while it is querying alignment.
+            let measuringView = measurementTextView
+            measuringView.font = textView.font
+            measuringView.textContainerInset = textView.textContainerInset
+            measuringView.textContainer.lineFragmentPadding = textView.textContainer.lineFragmentPadding
+            if measuringView.text != textView.text {
+                measuringView.text = textView.text
+            }
+            measuringView.textContainer.exclusionPaths = selectionExclusionPaths(for: width)
+            let fittingSize = measuringView.sizeThatFits(
+                CGSize(width: width, height: .greatestFiniteMagnitude)
+            )
+            let lineHeight = textView.font?.lineHeight ?? 19
+            return CGSize(width: width, height: min(max(fittingSize.height, lineHeight), lineHeight * 8))
+        }
+
+        private func selectionExclusionPaths(for width: CGFloat) -> [UIBezierPath] {
+            guard let selectedText, !selectedText.isEmpty, width > 0 else { return [] }
+            let editorWidth = ChatComposerSelectionPolicy.editorWidth(
+                totalWidth: width,
+                selectedTextWidth: selectionWidth(for: selectedText)
+            )
+            return [UIBezierPath(rect: CGRect(
+                x: 0, y: 0, width: max(width - editorWidth, 0), height: textView.font?.lineHeight ?? 19
+            ))]
         }
 
         override func layoutSubviews() {
@@ -438,9 +457,7 @@ struct ChatComposerTextView: UIViewRepresentable {
 
             // Reserve only the first line for the selection preview. The editor still
             // owns the full width, so subsequent question lines wrap across the card.
-            textView.textContainer.exclusionPaths = [
-                UIBezierPath(rect: CGRect(x: 0, y: 0, width: prefixWidth, height: lineHeight))
-            ]
+            textView.textContainer.exclusionPaths = selectionExclusionPaths(for: bounds.width)
         }
 
         @objc private func focusTextView() {
@@ -896,7 +913,9 @@ struct ChatScreen: View {
 
     private var standardComposerInputCard: some View {
         VStack(spacing: 0) {
-            HStack(alignment: isComposerExpanded ? .top : .center, spacing: isComposerExpanded ? 0 : 8) {
+            // Keep alignment stable while focus expands the card and presents the keyboard.
+            // The side controls have zero size when expanded, so center also fits that state.
+            HStack(alignment: .center, spacing: isComposerExpanded ? 0 : 8) {
                 composerPlusMenuButton
                     .opacity(isComposerExpanded ? 0 : 1)
                     .frame(width: isComposerExpanded ? 0 : nil, height: isComposerExpanded ? 0 : nil)

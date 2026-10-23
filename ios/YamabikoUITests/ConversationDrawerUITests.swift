@@ -81,6 +81,25 @@ final class ConversationDrawerUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "new chat draftsidebar draft")
     }
 
+    func testRepeatedChatOpeningPreservesAutomaticKeyboardAndDraft() {
+        let app = launchConversation()
+        let composer = app.descendants(matching: .any).matching(identifier: "chat-composer").firstMatch
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        for index in 0..<3 {
+            app.buttons["chat-history-button"].tap()
+            let row = app.buttons.matching(
+                NSPredicate(format: "label CONTAINS %@", "Text Selection Fixture")
+            ).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            row.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            // No tap on the editor: opening the conversation must restore focus.
+            composer.typeText("\(index)")
+            XCTAssertEqual(composer.value as? String, (0...index).map(String.init).joined())
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+    }
+
     func testHorizontalSwipeOpensAndClosesWhileVerticalAndDiagonalDragsStayInChat() {
         let app = launchConversation()
         let window = app.windows.firstMatch

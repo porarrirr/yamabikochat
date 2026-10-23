@@ -327,6 +327,51 @@ final class ChatPresentationArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testComposerMeasurementDoesNotRelayoutMountedEditor() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 12, y: 20, width: 300, height: 60)
+        container.setSelectedText("選択した文章")
+        container.textView.text = String(repeating: "質問の本文 ", count: 30)
+        container.layoutIfNeeded()
+        let originalBounds = container.bounds
+        let originalEditorFrame = container.textView.frame
+        let originalExclusions = container.textView.textContainer.exclusionPaths.map(\.bounds)
+
+        let wide = container.measuredSize(for: 360)
+        let narrow = container.measuredSize(for: 180)
+
+        XCTAssertEqual(wide.width, 360)
+        XCTAssertEqual(narrow.width, 180)
+        XCTAssertGreaterThanOrEqual(narrow.height, wide.height)
+        XCTAssertEqual(container.bounds, originalBounds)
+        XCTAssertEqual(container.textView.frame, originalEditorFrame)
+        XCTAssertEqual(container.textView.textContainer.exclusionPaths.map(\.bounds), originalExclusions)
+    }
+
+    @MainActor
+    func testComposerMeasurementMatchesDisplayedSelectionAndCapsHeight() {
+        let container = ChatComposerTextView.ComposerContainerView()
+        container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
+        for selection in [nil, "選択した文章"] as [String?] {
+            container.setSelectedText(selection)
+            for text in ["", "短い質問", String(repeating: "長い質問の本文 ", count: 100)] {
+                container.textView.text = text
+                container.setNeedsLayout()
+                container.layoutIfNeeded()
+                let lineHeight = container.textView.font?.lineHeight ?? 19
+                let displayedSize = container.textView.sizeThatFits(
+                    CGSize(width: 300, height: CGFloat.greatestFiniteMagnitude)
+                )
+                XCTAssertEqual(
+                    container.measuredSize(for: 300).height,
+                    min(max(displayedSize.height, lineHeight), lineHeight * 8),
+                    accuracy: 0.5
+                )
+            }
+        }
+    }
+
+    @MainActor
     func testSelectedTextOnlyReservesSpaceOnFirstEditorLine() {
         let container = ChatComposerTextView.ComposerContainerView()
         container.frame = CGRect(x: 0, y: 0, width: 300, height: 80)
