@@ -81,7 +81,7 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         description: """
         View, create, and edit files in the current execution workspace at /workspace. When python_execute is also provided, both tools use this same workspace; this editor does not execute Python or any other code itself. A project execution starts with a fresh workspace containing copies of the files added by the user; those files are not injected into the message context. Inspect /workspace when the task refers to project files.
 
-        If path is a file, view displays numbered lines; set view_format to jsonl when exact whitespace must be copied for str_replace. If path is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally; omit new_str to delete it. Copy the decoded jsonl text values without line metadata, joining lines with newlines. insert requires insert_line and new_str, and inserts after that 1-based line (0 inserts at the beginning). Long view output is clipped and marked with <response clipped>.
+        For PNG, JPEG, GIF, and WebP image files, view returns the image as multimodal tool content for vision-capable models; view_range and view_format do not apply. For text files, view displays numbered lines; set view_format to jsonl when exact whitespace must be copied for str_replace. If path is a directory, view lists visible entries up to 2 levels deep. create creates missing parent directories but never overwrites an existing path. str_replace requires old_str to occur exactly once and replaces it literally; omit new_str to delete it. Copy the decoded jsonl text values without line metadata, joining lines with newlines. insert requires insert_line and new_str, and inserts after that 1-based line (0 inserts at the beginning). Long view output is clipped and marked with <response clipped>.
         """,
         parametersJSON: #"{"type":"object","properties":{"command":{"type":"string","description":"The command to run.","enum":["view","create","str_replace","insert"]},"path":{"type":"string","description":"Absolute virtual path under /workspace."},"file_text":{"type":"string","description":"Required content for create."},"insert_line":{"type":"integer","description":"Required for insert; new_str is inserted after this line (0 inserts before line 1)."},"new_str":{"type":"string","description":"Replacement or insertion text. Omission deletes old_str for str_replace."},"old_str":{"type":"string","description":"Required unique literal text for str_replace."},"view_range":{"type":"array","items":{"type":"integer"},"description":"Optional inclusive 1-based [start,end] range; end -1 means EOF."},"view_format":{"type":"string","enum":["numbered","jsonl"],"default":"numbered","description":"For file views, jsonl returns one object per line with line and text fields. Copy the decoded text value for exact whitespace; omit line metadata."}},"required":["command","path"],"additionalProperties":false}"#
     )
@@ -192,6 +192,29 @@ struct StrReplaceEditorTool: LocalToolExecutor, @unchecked Sendable {
         case "view":
             guard ["numbered", "jsonl"].contains(arguments.viewFormat) else {
                 throw StrReplaceEditorError.invalid("Unsupported view_format: \(arguments.viewFormat)")
+            }
+            if let mime = UTType(filenameExtension: target.pathExtension)?.preferredMIMEType,
+               ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(mime) {
+                guard arguments.viewRange == nil, arguments.viewFormat == "numbered" else {
+                    throw StrReplaceEditorError.invalid("view_range and view_format are not supported for image files.")
+                }
+                let values = try target.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values.isRegularFile == true else {
+                    throw StrReplaceEditorError.invalid("The path \(arguments.path) is not a regular image file.")
+                }
+                guard (values.fileSize ?? 0) <= AppConstants.maxAttachmentSizeBytes else {
+                    throw StrReplaceEditorError.invalid("Image exceeds the 10 MB limit.")
+                }
+                let data = try Data(contentsOf: target, options: .mappedIfSafe)
+                let snapshot = try attachments.persistGeneratedFileReplacingExisting(
+                    data: data,
+                    relativePath: String(arguments.path.dropFirst("/workspace/".count)),
+                    collection: ConversationWorkspacePath.generatedFilesCollection(for: sessionID)
+                )
+                return Execution(
+                    content: "Image from \(arguments.path)",
+                    artifact: ToolArtifact(path: snapshot.path, name: target.lastPathComponent, mime: mime, size: Int64(data.count))
+                )
             }
             return Execution(
                 content: try view(

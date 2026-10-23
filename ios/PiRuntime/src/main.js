@@ -915,7 +915,8 @@ function messagesFrom(request, model) {
     if (message.role === "tool") {
       return {
         role: "toolResult", toolCallId: message.toolCallId || "tool", toolName: message.toolName || "tool",
-        content: [{ type: "text", text: message.content || "" }], isError: Boolean(message.toolResultIsError),
+        content: [{ type: "text", text: message.content || "" },
+          ...(message.attachments || []).map(image => ({ type: "image", data: image.data, mimeType: image.mimeType }))], isError: Boolean(message.toolResultIsError),
         timestamp: Date.now()
       };
     }
@@ -1127,7 +1128,8 @@ function makeTools(request, runId, res, subagentId) {
               details: {
                 status: result.status || (result.isError ? "failure" : "complete"),
                 provenance: result.provenance || null,
-                sources: result.sources || []
+                sources: result.sources || [],
+                imagePaths: result.imagePaths || []
               }
             });
           });
@@ -1162,7 +1164,9 @@ function replayableProviderTranscript(messages) {
       return [{
         role: "tool",
         content,
-        attachments: [],
+        // Persist file references, never base64 image bodies. Native iOS reloads
+        // these attachments for the next Pi execution.
+        attachments: message.details?.imagePaths || [],
         toolCallId: message.toolCallId,
         toolName: message.toolName,
         toolResultIsError: Boolean(message.isError)

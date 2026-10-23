@@ -37,6 +37,24 @@ test("native assistant provenance and signatures survive the bridge round trip",
   transformMessages(replayed, { ...target, api: assistant.api, provider: assistant.provider, id: assistant.model }, () => assert.fail("Same-model history should preserve IDs"));
 });
 
+test("tool images survive persisted transcript replay without storing base64 bodies", () => {
+  const transcript = sourceFunction("replayableProviderTranscript");
+  const messagesFrom = sourceFunction("messagesFrom", { usage: value => value });
+  const image = { type: "image", data: "cGxvdA==", mimeType: "image/png" };
+  const original = { role: "toolResult", toolCallId: "plot", toolName: "python_execute",
+    content: [{ type: "text", text: "generated" }, image], details: { imagePaths: ["/files/plot.png"] } };
+  const stored = JSON.parse(JSON.stringify(transcript([original])));
+  assert.deepEqual(stored[0].attachments, ["/files/plot.png"]);
+  assert.ok(!JSON.stringify(stored).includes(image.data));
+  // iOS loads the saved file reference when constructing the next Pi request.
+  stored[0].attachments = [{ data: image.data, mimeType: image.mimeType }];
+  const replayed = messagesFrom({ messages: stored }, {});
+  assert.deepEqual(JSON.parse(JSON.stringify(replayed[0].content)), original.content);
+  assert.equal(replayed[0].toolCallId, "plot");
+  assert.equal(replayed[0].toolName, "python_execute");
+  assert.deepEqual(JSON.parse(JSON.stringify(transcript([{ ...original, details: undefined }])))[0].attachments, []);
+});
+
 test("bundled Pi aborts the run and tool wait when the response disconnects", { timeout: 20000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "yamabiko-disconnect-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

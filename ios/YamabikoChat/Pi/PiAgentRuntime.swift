@@ -330,6 +330,7 @@ struct PiToolResultEnvelope: Encodable {
     var provenance: ToolResultProvenance?
     var sources: [ToolSource]
     var images: [PiAttachment]
+    var imagePaths: [String]
 }
 
 actor PiAgentRuntime {
@@ -1544,7 +1545,8 @@ actor PiAgentRuntime {
             status: result.status,
             provenance: result.provenance,
             sources: result.sources,
-            images: try toolResultImages(from: result.artifacts)
+            images: try toolResultImages(from: result.artifacts),
+            imagePaths: result.artifacts.filter { $0.mime.lowercased().hasPrefix("image/") }.map(\.path)
         )
     }
 

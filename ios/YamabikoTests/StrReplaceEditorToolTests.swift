@@ -48,6 +48,41 @@ final class StrReplaceEditorToolTests: XCTestCase {
         XCTAssertEqual(try String(contentsOfFile: artifactPath, encoding: .utf8), "one\nbetween\nTWO\nthree")
     }
 
+    func testViewImageReturnsMultimodalContentAndReplayableFile() async throws {
+        let workspace = try EditorWorkspaceStore(rootOverride: root).withWorkspace(sessionID: "session-one") { $0 }
+        let image = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")!
+        try image.write(to: workspace.appendingPathComponent("plot.png"))
+        let result = try await call(#"{"command":"view","path":"/workspace/plot.png"}"#)
+        let artifact = try XCTUnwrap(result.artifacts.first)
+        XCTAssertEqual(artifact.mime, "image/png")
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: artifact.path)), image)
+        let envelope = try PiAgentRuntime.toolResultEnvelope(result, requestID: "read-image")
+        XCTAssertEqual(envelope.images.first?.data, image.base64EncodedString())
+        XCTAssertEqual(envelope.imagePaths, [artifact.path])
+
+        var activity = ToolActivityPayload()
+        activity.apply(ToolActivityEvent(phase: .finished,
+            call: ToolCall(id: result.callId, name: result.name, argumentsJSON: "{}"),
+            result: result, createdAtMs: 1))
+        let saved = try JSONDecoder().decode(ToolActivityPayload.self, from: JSONEncoder().encode(activity))
+        let message = try XCTUnwrap(saved.providerTranscript.last)
+        XCTAssertEqual(message.attachments, [artifact.path])
+        let request = try PiAgentRuntime.makeRequest(ProviderRequest(model: "test", messages: [message]))
+        XCTAssertEqual(request.messages.first?.attachments.first?.data, image.base64EncodedString())
+    }
+
+    func testImageViewRejectsTextRangesAndOversizedImages() async throws {
+        let workspace = try EditorWorkspaceStore(rootOverride: root).withWorkspace(sessionID: "session-one") { $0 }
+        try Data([0x89]).write(to: workspace.appendingPathComponent("plot.png"))
+        await XCTAssertThrowsErrorAsync {
+            _ = try await self.call(#"{"command":"view","path":"/workspace/plot.png","view_range":[1,1]}"#)
+        }
+        try Data(count: AppConstants.maxAttachmentSizeBytes + 1).write(to: workspace.appendingPathComponent("plot.png"))
+        await XCTAssertThrowsErrorAsync {
+            _ = try await self.call(#"{"command":"view","path":"/workspace/plot.png"}"#)
+        }
+    }
+
     func testSchemaContainsDShCommandsAndRequiredParameters() throws {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(tool.definition.parametersJSON.utf8)) as? [String: Any])
         XCTAssertEqual(object["required"] as? [String], ["command", "path"])

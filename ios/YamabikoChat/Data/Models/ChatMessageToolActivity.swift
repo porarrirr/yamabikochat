@@ -249,6 +249,7 @@ struct ToolActivityPayload: Codable, Sendable, Equatable {
             ProviderRequestMessage(
                 role: "tool",
                 content: result.content,
+                attachments: result.artifacts.filter { $0.mime.lowercased().hasPrefix("image/") }.map(\.path),
                 toolCallId: event.call.id,
                 toolName: event.call.name,
                 toolResultIsError: result.isError

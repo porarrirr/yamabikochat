@@ -42,7 +42,8 @@ for (const [incompleteReason, terminalTurn, compaction = false] of [[null, 2], [
         if(!${compaction}&&payload.tools?.[0]?.type!=='namespace')throw new Error('Local tools must be namespaced');
         if(${compaction}&&!JSON.stringify(payload.input).includes('<conversation>'))throw new Error('Expected Pi summarization context');
         responses++;
-        if(responses>${terminalTurn})throw new Error("Unexpected inference after terminal response");
+        if(responses>${terminalTurn} && !(responses===3 && ${!incompleteReason && !compaction} && JSON.stringify(payload.input).includes('Inspect that plot again')))throw new Error("Unexpected inference after terminal response");
+        if(!${compaction} && responses>=2 && !JSON.stringify(payload.input).includes('data:image/png;base64,cGxvdA=='))throw new Error('Tool image missing from Responses input');
         const item=!${compaction}&&responses===1?{type:'function_call',id:'fc_bridge',call_id:'call_bridge',name:'local_echo',namespace:'yamabiko',arguments:'{}',status:'completed'}:{type:'message',id:'msg_bridge',role:'assistant',status:'completed',content:[{type:'output_text',text:'Hello from ChatGPT plan',annotations:[]}]};
         const incompleteReason=${JSON.stringify(incompleteReason)};
         const events=[{type:'response.created',response:{id:'resp_bridge',status:'in_progress'}},{type:'response.output_item.added',output_index:0,item:{...item,arguments:responses===1?'':undefined}},{type:'response.output_item.done',output_index:0,item},{type:incompleteReason && responses>=${terminalTurn}?'response.incomplete':'response.completed',response:{id:'resp_bridge',status:incompleteReason && responses>=${terminalTurn}?'incomplete':'completed',...(incompleteReason && responses>=${terminalTurn}?{incomplete_details:{reason:incompleteReason}}:{}),output:[item],usage:{input_tokens:2,output_tokens:1,total_tokens:3}}}];
@@ -125,7 +126,7 @@ for (const [incompleteReason, terminalTurn, compaction = false] of [[null, 2], [
     if (event.type === "tool_request") {
       toolExecutions++;
       assert.equal(event.name, "local_echo");
-      await post("/v1/tool-result", { requestId: event.requestId, content: "local result", isError: false, status: "complete" });
+      await post("/v1/tool-result", { requestId: event.requestId, content: "local result", isError: false, status: "complete", images: [{ data: "cGxvdA==", mimeType: "image/png" }], imagePaths: ["/files/plot.png"] });
     }
     if (event.type === "completed") completed = event.response;
   }
@@ -139,6 +140,20 @@ for (const [incompleteReason, terminalTurn, compaction = false] of [[null, 2], [
     assert.equal(completed.text, "Hello from ChatGPT plan");
     assert.deepEqual(llmSuccess, compaction ? [] : [true, true]);
     if (compaction) assert.match(completed.providerTranscript[0].content, /<summary>\nHello from ChatGPT plan/);
+    if (!compaction) {
+      const tool = completed.providerTranscript.find(message => message.role === "tool");
+      assert.deepEqual(tool.attachments, ["/files/plot.png"]);
+      assert.ok(!JSON.stringify(completed.providerTranscript).includes("cGxvdA=="));
+      const messages = completed.providerTranscript.map(message => ({ ...message,
+        attachments: message.attachments.map(() => ({ data: "cGxvdA==", mimeType: "image/png" })) }));
+      messages.push({ role: "user", content: "Inspect that plot again", attachments: [] });
+      let replayed;
+      for await (const event of events(await post("/v1/run", { ...envelope, runId: "image-replay", request: { ...envelope.request, messages } }))) {
+        assert.notEqual(event.type, "error", event.message);
+        if (event.type === "completed") replayed = event.response;
+      }
+      assert.equal(replayed?.text, "Hello from ChatGPT plan");
+    }
   }
   assert.equal((await post("/v1/auth/revoke", { provider: "chatgpt", credential })).status, 200);
   const afterLogout = await (await post("/v1/models/resolve", { models: [{ contractVersion: 2, provider: "openai-chatgpt", model: "gpt-6-sol" }] })).json();

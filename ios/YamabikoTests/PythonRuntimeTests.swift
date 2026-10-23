@@ -457,6 +457,7 @@ with open("/workspace/src/main.js", "r", encoding="utf-8") as handle:
         let data = try JSONEncoder().encode(envelope)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let images = try XCTUnwrap(object["images"] as? [[String: Any]])
+        XCTAssertEqual(object["imagePaths"] as? [String], [imageURL.path])
         XCTAssertEqual(images.first?["mimeType"] as? String, "image/png")
         XCTAssertEqual(images.first?["data"] as? String, imageData.base64EncodedString())
     }
