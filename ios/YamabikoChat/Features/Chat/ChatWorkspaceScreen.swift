@@ -484,6 +484,7 @@ private struct ChatTopBarScrim: View {
         LinearGradient(
             stops: [
                 .init(color: tint.opacity(fullOpacity), location: 0),
+                .init(color: tint.opacity(fullOpacity * 0.96), location: 0.72),
                 .init(color: tint.opacity(0), location: 1)
             ],
             startPoint: .top,
