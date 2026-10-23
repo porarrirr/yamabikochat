@@ -21,6 +21,9 @@ final class ConversationDrawerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["chat-history-button"].waitForExistence(timeout: 20))
         let composer = app.descendants(matching: .any).matching(identifier: "chat-composer").firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        composer.typeText("relaunch draft")
+        XCTAssertEqual(composer.value as? String, "relaunch draft")
         XCTAssertFalse(message.exists)
         XCTAssertFalse(app.buttons["conversation-drawer-dismiss"].exists)
 
@@ -57,6 +60,25 @@ final class ConversationDrawerUITests: XCTestCase {
             XCTAssertTrue(headerButton.waitForExistence(timeout: 5))
             XCTAssertEqual(headerButton.frame.minX, initialX, accuracy: 1)
         }
+    }
+
+    func testNewChatAutomaticallyShowsKeyboard() {
+        let app = launchConversation()
+        app.buttons["chat-primary-action-button"].tap()
+
+        let composer = app.descendants(matching: .any).matching(identifier: "chat-composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        // Typing without tapping verifies that the new composer owns focus.
+        composer.typeText("new chat draft")
+        XCTAssertEqual(composer.value as? String, "new chat draft")
+
+        app.buttons["chat-history-button"].tap()
+        app.buttons["sidebar-new-chat"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        composer.typeText("sidebar draft")
+        // Empty conversations are reused, including their in-memory draft.
+        XCTAssertEqual(composer.value as? String, "new chat draftsidebar draft")
     }
 
     func testHorizontalSwipeOpensAndClosesWhileVerticalAndDiagonalDragsStayInChat() {

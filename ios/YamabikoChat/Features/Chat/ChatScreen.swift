@@ -116,6 +116,10 @@ struct ChatComposerTextView: UIViewRepresentable {
         container.textView.onDeleteAtBeginning = { [weak coordinator = context.coordinator] in
             coordinator?.deleteSelectedText()
         }
+        container.onMoveToWindow = { [weak coordinator = context.coordinator, weak container] in
+            guard let container, container.window != nil else { return }
+            coordinator?.requestFocus(for: container)
+        }
         context.coordinator.lastReportedText = text
         configure(container, context: context, placeCursorAtEnd: true)
         return container
@@ -146,13 +150,16 @@ struct ChatComposerTextView: UIViewRepresentable {
             }
         } else if isFocused, !container.textView.isFirstResponder {
             context.coordinator.requestFocus(for: container)
-        } else if !isFocused, container.textView.isFirstResponder {
+        } else if !isFocused {
             context.coordinator.cancelFocusRequest()
-            container.textView.resignFirstResponder()
+            if container.textView.isFirstResponder {
+                container.textView.resignFirstResponder()
+            }
         }
     }
 
     static func dismantleUIView(_ uiView: ComposerContainerView, coordinator: Coordinator) {
+        uiView.onMoveToWindow = nil
         coordinator.cancelFocusRequest()
     }
 
@@ -220,14 +227,8 @@ struct ChatComposerTextView: UIViewRepresentable {
 
         func requestFocus(for container: ComposerContainerView) {
             guard focusRequest == nil else { return }
-            // If window is available, becomeFirstResponder synchronously to avoid stale Binding race.
-            if container.window != nil,
-               parent.isFocused,
-               parent.isEnabled,
-               container.textView.isEditable,
-               container.textView.becomeFirstResponder() {
-                return
-            }
+            // Keyboard presentation changes SwiftUI layout and the focus Binding.
+            // Wait until the current view update completes, then recheck the request.
             let request = DispatchWorkItem { [weak self, weak container] in
                 guard let self, let container else { return }
                 self.focusRequest = nil
@@ -338,10 +339,16 @@ struct ChatComposerTextView: UIViewRepresentable {
 
     final class ComposerContainerView: UIView {
         let textView = ComposerTextView()
+        var onMoveToWindow: (() -> Void)?
         private let iconView = UIImageView()
         private let selectionLabel = UILabel()
         private let selectionContainer = UIView()
         private var selectedText: String?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            onMoveToWindow?()
+        }
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -601,6 +608,12 @@ struct ChatScreen: View {
                 isReasoningEffortPanelPresented = false
             }
         }
+        .onChange(of: appState.composerFocusGeneration) { _, _ in
+            isComposerFocused = ChatComposerFocusPolicy.focusState(
+                current: true,
+                isSending: viewModel.isSending
+            )
+        }
         .onChange(of: isComposerFocused) { _, isFocused in
             if !isFocused {
                 isReasoningEffortPanelPresented = false
@@ -625,6 +638,10 @@ struct ChatScreen: View {
             isReasoningEffortPanelPresented = false
         }
         .task {
+            isComposerFocused = ChatComposerFocusPolicy.focusState(
+                current: true,
+                isSending: viewModel.isSending
+            )
             recentPhotoLibrary.refresh()
         }
         .onChange(of: scenePhase) { _, phase in

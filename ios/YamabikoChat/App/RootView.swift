@@ -422,6 +422,7 @@ struct RootView: View {
         listViewModel.resetProjectFilterForNonProjectConversation(conversationId: id)
         let showConversation = {
             appState.selectedConversationID = id
+            appState.requestComposerFocus()
             keepSidebarAfterSecretDiscard = false
             setPreferredCompactColumn(.detail)
         }
