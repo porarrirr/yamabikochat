@@ -52,7 +52,7 @@ struct ChatWorkspaceScreen: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             topBar
                 .background(alignment: .bottom) {
-                    ChatTopBarScrim()
+                    ChatTopBarScrim(topOffset: topBarMetrics.topOffset)
                         .frame(height: topBarMetrics.height + topBarMetrics.topOffset)
                 }
                 .background(
@@ -467,15 +467,35 @@ private struct ChatTopBarMetricsKey: PreferenceKey {
     }
 }
 
-// The header stays fully readable while the messages scrolled underneath it
-// remain visible. A UIKit blur cannot sample the SwiftUI-hosted timeline cells,
-// so the see-through comes from a translucent scrim instead.
+// The header keeps its current tint at the top and fades to fully transparent
+// at its bottom edge, so scrolled messages blend into view instead of meeting a
+// hard cut. A UIKit blur cannot sample the SwiftUI-hosted timeline cells, so
+// the see-through comes from this gradient.
 private struct ChatTopBarScrim: View {
     @Environment(\.colorScheme) private var colorScheme
+    /// Height of the status bar area, which keeps the full tint.
+    let topOffset: CGFloat
 
     var body: some View {
-        Color(uiColor: .amoledSystemBackground)
-            .opacity(colorScheme == .dark ? 0.88 : 0.92)
+        GeometryReader { proxy in
+            let solidFraction: CGFloat = proxy.size.height > 0
+                ? min(max(topOffset / proxy.size.height, 0), 1)
+                : 0
+            let tint = Color(uiColor: .amoledSystemBackground)
+            LinearGradient(
+                stops: [
+                    .init(color: tint.opacity(fullOpacity), location: 0),
+                    .init(color: tint.opacity(fullOpacity), location: solidFraction),
+                    .init(color: tint.opacity(0), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+
+    private var fullOpacity: Double {
+        colorScheme == .dark ? 0.88 : 0.92
     }
 }
 
