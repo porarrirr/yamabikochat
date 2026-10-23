@@ -1342,8 +1342,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     var chatStatsGroups: [String] {
-        let visible = settings.visibleChatStatsFields()
-        let stats = conversationStats
+        Self.chatStatsGroups(stats: conversationStats, visible: settings.visibleChatStatsFields())
+    }
+
+    static func chatStatsGroups(stats: ConversationStats, visible: Set<ChatStatsField>) -> [String] {
         var groups: [String] = []
         if visible.contains(.turns), stats.turns > 0 {
             groups.append(L10n.format("%dターン", Int(stats.turns)))
@@ -1366,10 +1368,11 @@ final class ChatViewModel: ObservableObject {
         if visible.contains(.cacheHit), let percent = stats.cacheHitPercent {
             groups.append(L10n.format("キャッシュヒット %d%%", percent))
         }
-        if visible.contains(.tokens), (stats.billedInputTokens ?? 0) > 0 || stats.outputTokens > 0 {
+        // Match the input bucket in usage statistics; unknown cache writes must not hide known input.
+        if visible.contains(.tokens), stats.inputTokens > 0 || stats.outputTokens > 0 {
             groups.append(L10n.format(
                 "入力 %@ tok · 出力 %@ tok",
-                ChatStatsFormatter.tokens(stats.billedInputTokens),
+                ChatStatsFormatter.tokens(stats.inputTokens),
                 ChatStatsFormatter.tokens(stats.outputTokens)
             ))
         }

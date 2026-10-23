@@ -49,6 +49,35 @@ final class ConversationStatsTests: XCTestCase {
         XCTAssertEqual(stats.cacheHitPercent, 45)
     }
 
+    @MainActor
+    func testChatInputMatchesUsageStatisticsEvenWhenCacheWritesAreUnknown() {
+        for cacheCreation: Int64? in [nil, 0, 500] {
+            let stats = ConversationStats(
+                inputTokens: 7_900,
+                outputTokens: 765,
+                cachedInputTokens: 16_300,
+                cacheCreationInputTokens: cacheCreation
+            )
+
+            XCTAssertEqual(
+                ChatViewModel.chatStatsGroups(stats: stats, visible: [.tokens]),
+                [L10n.format("入力 %@ tok · 出力 %@ tok", "7.9K", "765")]
+            )
+        }
+    }
+
+    @MainActor
+    func testChatShowsKnownInputWithoutOutputOrCacheWriteCount() {
+        let stats = ConversationStats(inputTokens: 120, cacheCreationInputTokens: nil)
+
+        XCTAssertEqual(
+            ChatViewModel.chatStatsGroups(stats: stats, visible: [.tokens]),
+            [L10n.format("入力 %@ tok · 出力 %@ tok", "120", "0")]
+        )
+        XCTAssertTrue(ChatViewModel.chatStatsGroups(stats: stats, visible: []).isEmpty)
+        XCTAssertTrue(ChatViewModel.chatStatsGroups(stats: .init(), visible: [.tokens]).isEmpty)
+    }
+
     func testMissingSamplesDoNotInventLatencyOrThroughput() {
         let stats = ConversationStats(steps: 1, llmDurationMs: 900)
 
