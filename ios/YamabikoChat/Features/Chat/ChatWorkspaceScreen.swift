@@ -18,6 +18,7 @@ struct ChatWorkspaceScreen: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     let conversationID: Int64
     @ObservedObject var viewModel: ChatViewModel
@@ -52,7 +53,7 @@ struct ChatWorkspaceScreen: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             topBar
                 .background(alignment: .bottom) {
-                    ChatTopBarScrim(topOffset: topBarMetrics.topOffset)
+                    ChatTopBarScrim()
                         .frame(height: topBarMetrics.height + topBarMetrics.topOffset)
                 }
                 .background(
@@ -219,6 +220,9 @@ struct ChatWorkspaceScreen: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 7)
+        // The gradient leaves the message text visible behind the controls, so
+        // keep them separated from it with a halo in the opposite tone.
+        .shadow(color: colorScheme == .dark ? .black.opacity(0.65) : .white.opacity(0.9), radius: 5, y: 1)
         .overlay(alignment: .bottom) {
             Divider()
                 .opacity(0.18)
@@ -467,31 +471,24 @@ private struct ChatTopBarMetricsKey: PreferenceKey {
     }
 }
 
-// The header keeps its current tint at the top and fades to fully transparent
-// at its bottom edge, so scrolled messages blend into view instead of meeting a
-// hard cut. A UIKit blur cannot sample the SwiftUI-hosted timeline cells, so
-// the see-through comes from this gradient.
+// The header keeps its current tint at the top of the screen and fades to fully
+// transparent at its bottom edge, so scrolled messages blend into view instead
+// of meeting a hard cut. The status bar is part of the fade. A UIKit blur cannot
+// sample the SwiftUI-hosted timeline cells, so the see-through comes from this
+// gradient.
 private struct ChatTopBarScrim: View {
     @Environment(\.colorScheme) private var colorScheme
-    /// Height of the status bar area, which keeps the full tint.
-    let topOffset: CGFloat
 
     var body: some View {
-        GeometryReader { proxy in
-            let solidFraction: CGFloat = proxy.size.height > 0
-                ? min(max(topOffset / proxy.size.height, 0), 1)
-                : 0
-            let tint = Color(uiColor: .amoledSystemBackground)
-            LinearGradient(
-                stops: [
-                    .init(color: tint.opacity(fullOpacity), location: 0),
-                    .init(color: tint.opacity(fullOpacity), location: solidFraction),
-                    .init(color: tint.opacity(0), location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        let tint = Color(uiColor: .amoledSystemBackground)
+        LinearGradient(
+            stops: [
+                .init(color: tint.opacity(fullOpacity), location: 0),
+                .init(color: tint.opacity(0), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private var fullOpacity: Double {
