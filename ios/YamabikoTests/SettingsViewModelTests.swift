@@ -53,6 +53,21 @@ private final class SettingsOpenCodeGoUsageHTTPClient: HTTPClientProtocol {
 
 final class SettingsViewModelTests: XCTestCase {
     @MainActor
+    func testTechnicalFailureIsHiddenAndInputGuidanceRemainsVisible() {
+        let viewModel = SettingsViewModel()
+        let error = NSError(domain: "DiagnosticOnly", code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "Response parse failed: timeout"])
+        viewModel.recordFailure(error)
+        XCTAssertEqual(viewModel.errorMessage, error.localizedDescription)
+        XCTAssertNil(viewModel.visibleErrorMessage)
+
+        viewModel.errorMessage = "APIキーを入力してください"
+        XCTAssertEqual(viewModel.visibleErrorMessage, viewModel.errorMessage)
+        viewModel.errorMessage = nil
+        XCTAssertNil(viewModel.visibleErrorMessage)
+    }
+
+    @MainActor
     func testChatGPTManualRefreshLoadsFreshContractsBeforeAccountDiscovery() async throws {
         let cacheURL = FileManager.default.temporaryDirectory.appendingPathComponent("chatgpt-refresh-\(UUID().uuidString).json")
         let suiteName = "SettingsViewModelTests.\(UUID().uuidString)"

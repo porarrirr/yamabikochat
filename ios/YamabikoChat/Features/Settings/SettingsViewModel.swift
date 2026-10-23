@@ -52,7 +52,21 @@ final class SettingsViewModel: ObservableObject {
     @Published var codexPlanTypeInput: String = ""
 
     @Published var statusMessage: String?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { isDiagnosticError = false }
+    }
+    @Published private var isDiagnosticError = false
+
+    /// Input guidance remains visible; technical failures belong in diagnostics.
+    var visibleErrorMessage: String? {
+        isDiagnosticError ? nil : errorMessage
+    }
+
+    func recordFailure(_ error: Error, operation: String = #function) {
+        errorMessage = error.localizedDescription
+        isDiagnosticError = true
+        DiagnosticsLogger.log(operation, level: .error, category: .settings, error: error)
+    }
     #if DEBUG
     @Published var diagnosticsLogText: String = ""
     #endif
@@ -206,7 +220,7 @@ final class SettingsViewModel: ObservableObject {
             loadAlibabaMCPAuthorizationToken()
             syncSystemPromptPresetName()
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Settings load failed", error: error)
         }
 
@@ -256,7 +270,7 @@ final class SettingsViewModel: ObservableObject {
             guard activeCodexModelsFetchID == fetchID else { return }
             codexModels = repository.cachedChatGPTModels()
             codexModelsError = error.localizedDescription
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("ChatGPT account model catalog unavailable", category: .network, error: error)
         }
     }
@@ -272,7 +286,7 @@ final class SettingsViewModel: ObservableObject {
                 let preview = try await Task.detached { try skillRepository.inspect(sourceURL: url) }.value
                 agentSkillInstallPreview = preview
             } catch {
-                errorMessage = error.localizedDescription
+                recordFailure(error)
                 DiagnosticsLogger.log("Agent Skill inspection failed", category: .settings, error: error)
             }
         }
@@ -285,7 +299,7 @@ final class SettingsViewModel: ObservableObject {
             agentSkillInstallPreview = nil
             statusMessage = "Agent Skillをインストールしました。"
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -296,14 +310,14 @@ final class SettingsViewModel: ObservableObject {
 
     func setAgentSkillEnabled(_ enabled: Bool, name: String) {
         do { try skillRepository?.setEnabled(enabled, name: name) }
-        catch { errorMessage = error.localizedDescription }
+        catch { recordFailure(error) }
     }
 
     func deleteAgentSkill(name: String) {
         do {
             try skillRepository?.delete(name: name)
             statusMessage = "Agent Skillを削除しました。一時コンテナは遅くとも20分で失効します。"
-        } catch { errorMessage = error.localizedDescription }
+        } catch { recordFailure(error) }
     }
 
     func modelsDevField(providerID: String, fieldName: String) -> String {
@@ -332,7 +346,7 @@ final class SettingsViewModel: ObservableObject {
             statusMessage = L10n.text("保存しました")
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -365,7 +379,7 @@ final class SettingsViewModel: ObservableObject {
             modelsDevFieldCache.removeValue(forKey: key)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -549,7 +563,7 @@ final class SettingsViewModel: ObservableObject {
                 errorMessage = nil
             }
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             if showSuccessMessage {
                 statusMessage = nil
             }
@@ -604,7 +618,7 @@ final class SettingsViewModel: ObservableObject {
             statusMessage = L10n.text("APIキーを保存しました")
             loadCurrentProviderAPIKey()
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("API key save failed provider=\(settings.apiProvider)", error: error)
         }
     }
@@ -702,7 +716,7 @@ final class SettingsViewModel: ObservableObject {
             customEndpointDraft = preset
             selectCustomEndpointPreset(preset.name)
             statusMessage = "カスタムエンドポイントを保存しました"
-        } catch { errorMessage = error.localizedDescription }
+        } catch { recordFailure(error) }
     }
 
     func removeOpenAICompatPreset(name: String) {
@@ -1196,7 +1210,7 @@ final class SettingsViewModel: ObservableObject {
             superGrokEmailInput = state.email ?? ""
             statusMessage = L10n.text("SuperGrokにログインしました")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -1213,7 +1227,7 @@ final class SettingsViewModel: ObservableObject {
             superGrokEmailInput = state.email ?? ""
             statusMessage = L10n.text("SuperGrokにログインしました")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -1229,7 +1243,7 @@ final class SettingsViewModel: ObservableObject {
             superGrokEmailInput = ""
             statusMessage = L10n.text("SuperGrokからログアウトしました")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -1244,7 +1258,7 @@ final class SettingsViewModel: ObservableObject {
             superGrokEmailInput = state.email ?? ""
             statusMessage = L10n.text("SuperGrokトークンを更新しました")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -1278,7 +1292,7 @@ final class SettingsViewModel: ObservableObject {
             await refreshCodexModels()
             DiagnosticsLogger.log("Codex auth login succeeded accountId=\(state.accountId ?? "-")")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Codex auth login failed", error: error)
         }
     }
@@ -1305,7 +1319,7 @@ final class SettingsViewModel: ObservableObject {
                 : "ChatGPTからログアウトしました"
             DiagnosticsLogger.log("Codex auth logout succeeded")
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Codex auth logout failed", error: error)
         }
     }
@@ -1322,7 +1336,7 @@ final class SettingsViewModel: ObservableObject {
         case let .success(state):
             codexAuthState = state
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Codex auth refresh failed", error: error)
         }
     }
@@ -1455,7 +1469,7 @@ final class SettingsViewModel: ObservableObject {
             isHydratingFromPersistence = false
         } catch {
             isHydratingFromPersistence = false
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("API key load failed provider=\(settings.apiProvider)", error: error)
         }
     }
@@ -1475,7 +1489,7 @@ final class SettingsViewModel: ObservableObject {
             isHydratingFromPersistence = false
         } catch {
             isHydratingFromPersistence = false
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Alibaba MCP authorization token load failed", error: error)
         }
     }

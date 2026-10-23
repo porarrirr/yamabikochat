@@ -444,6 +444,7 @@ struct ChatComposerTextView: UIViewRepresentable {
 }
 
 struct ChatScreen: View {
+    @EnvironmentObject private var appState: AppState
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject var questionCoordinator: UserQuestionCoordinator
     var onNavigateToConversation: ((Int64) -> Void)? = nil
@@ -641,7 +642,7 @@ struct ChatScreen: View {
                     viewModel.addAttachment(url: url)
                 }
             case let .failure(error):
-                viewModel.errorMessage = error.localizedDescription
+                viewModel.recordFailure(error)
             }
         }
         .photosPicker(

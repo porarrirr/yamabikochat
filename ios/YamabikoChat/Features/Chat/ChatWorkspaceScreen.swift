@@ -89,7 +89,7 @@ struct ChatWorkspaceScreen: View {
             viewModel.inputText = text
             viewModel.sendMessage()
         } catch {
-            viewModel.errorMessage = error.localizedDescription
+            viewModel.recordFailure(error)
             DiagnosticsLogger.log(
                 "Could not load pending initial message",
                 category: .chat,
@@ -398,7 +398,7 @@ struct ChatWorkspaceScreen: View {
                 appState.selectedConversationID = conversationID
             }
         } catch {
-            viewModel.errorMessage = error.localizedDescription
+            viewModel.recordFailure(error)
             DiagnosticsLogger.log(
                 "Create conversation from workspace failed",
                 category: .chat,
@@ -416,7 +416,7 @@ struct ChatWorkspaceScreen: View {
                 let url = try await viewModel.exportConversation(mode: mode)
                 exportedArchive = ConversationExportShareItem(url: url)
             } catch {
-                viewModel.errorMessage = error.localizedDescription
+                viewModel.recordFailure(error)
                 DiagnosticsLogger.log(
                     "Conversation export failed",
                     category: .chat,

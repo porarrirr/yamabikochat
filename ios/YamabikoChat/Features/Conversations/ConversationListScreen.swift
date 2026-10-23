@@ -63,7 +63,7 @@ struct ConversationListScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if let error = viewModel.errorMessage {
+            if let error = viewModel.visibleErrorMessage {
                 HStack(alignment: .top) {
                     Text(error)
                         .font(.caption)
@@ -632,7 +632,7 @@ struct CreateProjectSheet: View {
                         .frame(minHeight: 120)
                 }
 
-                if let error = viewModel.errorMessage {
+                if let error = viewModel.visibleErrorMessage {
                     Section {
                         Text(error)
                             .font(.caption)

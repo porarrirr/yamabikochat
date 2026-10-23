@@ -24,6 +24,21 @@ private final class ViewModelBranchCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ChatViewModelBranchTests: XCTestCase {
+    @MainActor
+    func testTechnicalFailureIsHiddenAndInputGuidanceRemainsVisible() {
+        let viewModel = ChatViewModel(conversationID: 1)
+        let error = NSError(domain: "DiagnosticOnly", code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "Response parse failed: timeout"])
+        viewModel.recordFailure(error)
+        XCTAssertEqual(viewModel.errorMessage, error.localizedDescription)
+        XCTAssertNil(viewModel.visibleErrorMessage)
+
+        viewModel.errorMessage = "APIキーを入力してください"
+        XCTAssertEqual(viewModel.visibleErrorMessage, viewModel.errorMessage)
+        viewModel.errorMessage = nil
+        XCTAssertNil(viewModel.visibleErrorMessage)
+    }
+
     func testBranchConversationReturnsNewConversationId() throws {
         let fixture = try makeFixture()
         let conversationId = try fixture.repository.createConversation(title: "New Chat")
@@ -62,8 +77,7 @@ final class ChatViewModelBranchTests: XCTestCase {
 
         XCTAssertNil(newConversationId)
         XCTAssertNotNil(viewModel.errorMessage)
-        let localizedPrefix = L10n.text("ブランチの作成に失敗しました: %@").components(separatedBy: "%@").first ?? ""
-        XCTAssertTrue(viewModel.errorMessage?.contains(localizedPrefix) == true)
+        XCTAssertNil(viewModel.visibleErrorMessage)
     }
 
     func testBindExposesSecretConversationState() throws {

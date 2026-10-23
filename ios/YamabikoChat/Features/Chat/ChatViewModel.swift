@@ -19,7 +19,21 @@ final class ChatViewModel: ObservableObject {
     @Published var isAutoConversationPaused: Bool = false
     @Published var autoConversationStatus: String?
     @Published private(set) var generationStatus: String?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { isDiagnosticError = false }
+    }
+    @Published private var isDiagnosticError = false
+
+    /// Input guidance remains visible; technical failures belong in diagnostics.
+    var visibleErrorMessage: String? {
+        isDiagnosticError ? nil : errorMessage
+    }
+
+    func recordFailure(_ error: Error, operation: String = #function) {
+        errorMessage = error.localizedDescription
+        isDiagnosticError = true
+        DiagnosticsLogger.log(operation, level: .error, category: .chat, error: error)
+    }
     var attachments: [AttachmentDraft] {
         get { composerStore.attachments }
         set { composerStore.attachments = newValue }
@@ -82,7 +96,7 @@ final class ChatViewModel: ObservableObject {
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] speechError in
-                self?.errorMessage = speechError.localizedDescription
+                self?.recordFailure(speechError)
                 DiagnosticsLogger.log(
                     "Speech recognition error",
                     category: .app,
@@ -244,7 +258,7 @@ final class ChatViewModel: ObservableObject {
                 rebuildContextUsage()
             } catch {
                 if !Task.isCancelled {
-                    errorMessage = error.localizedDescription
+                    recordFailure(error)
                     DiagnosticsLogger.log("Context compaction failed", category: .chat, error: error)
                 }
             }
@@ -275,7 +289,7 @@ final class ChatViewModel: ObservableObject {
             conversationTitle = conversation.title
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Switch secret mode failed conversation=\(conversationID)",
                 category: .chat,
@@ -525,7 +539,7 @@ final class ChatViewModel: ObservableObject {
                     startedAtMs: runStartedAtMs
                 )
             } catch {
-                errorMessage = error.localizedDescription
+                recordFailure(error)
                 restoreDraftIfUncommitted(
                     repository: repository,
                     text: text,
@@ -645,7 +659,7 @@ final class ChatViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                errorMessage = error.localizedDescription
+                recordFailure(error)
                 DiagnosticsLogger.log(
                     "Regenerate last assistant failed conversation=\(conversationID)",
                     category: .chat,
@@ -665,7 +679,7 @@ final class ChatViewModel: ObservableObject {
             errorMessage = nil
             return try repository.branchConversation(from: conversationID, messageId: messageId)
         } catch {
-            errorMessage = L10n.format("ブランチの作成に失敗しました: %@", error.localizedDescription)
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Branch conversation failed conversation=\(conversationID) message=\(messageId)",
                 category: .chat,
@@ -696,7 +710,7 @@ final class ChatViewModel: ObservableObject {
         do {
             try repository.setSelectedVariant(messageId: messageId, variantIndex: nextIndex)
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Switch message variant failed conversation=\(conversationID) message=\(messageId)",
                 category: .chat,
@@ -723,7 +737,7 @@ final class ChatViewModel: ObservableObject {
             }
             try repository.saveSettings(updated)
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Toggle dual mode failed", category: .chat, error: error)
         }
     }
@@ -741,7 +755,7 @@ final class ChatViewModel: ObservableObject {
             try repository.setChatMode(mode)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Set chat mode failed", category: .chat, metadata: ["mode": mode.rawValue], error: error)
         }
     }
@@ -764,7 +778,7 @@ final class ChatViewModel: ObservableObject {
             }
             try repository.saveSettings(updated)
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log("Toggle auto conversation failed", category: .chat, error: error)
         }
     }
@@ -968,7 +982,7 @@ final class ChatViewModel: ObservableObject {
             }
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Apply chat preset failed conversation=\(conversationID)",
                 category: .chat,
@@ -998,7 +1012,7 @@ final class ChatViewModel: ObservableObject {
             reasoningEffortConfiguration = configuration
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Chat reasoning effort update failed",
                 category: .settings,
@@ -1046,7 +1060,7 @@ final class ChatViewModel: ObservableObject {
             activeSystemPromptPresetName = presetName
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             DiagnosticsLogger.log(
                 "Apply system prompt preset failed conversation=\(conversationID)",
                 category: .chat,
@@ -1106,7 +1120,7 @@ final class ChatViewModel: ObservableObject {
             isAutoConversationRunning = false
             isAutoConversationPaused = false
             activeAutoConversationID = nil
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             autoConversationStatus = L10n.text("自動会話の初期化に失敗しました")
             DiagnosticsLogger.log(
                 "Auto conversation setup failed conversation=\(conversationID)",
@@ -1140,7 +1154,7 @@ final class ChatViewModel: ObservableObject {
                 await MainActor.run {
                     self.isAutoConversationRunning = false
                     self.isAutoConversationPaused = false
-                    self.errorMessage = error.localizedDescription
+                    self.recordFailure(error)
                     self.autoConversationStatus = L10n.text("自動会話でエラーが発生しました")
                     self.activeAutoConversationID = nil
                 }
@@ -1163,7 +1177,7 @@ final class ChatViewModel: ObservableObject {
             isAutoConversationPaused = true
             autoConversationStatus = L10n.text("自動会話を一時停止しました")
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 

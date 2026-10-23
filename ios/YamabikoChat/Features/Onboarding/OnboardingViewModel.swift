@@ -90,7 +90,7 @@ final class OnboardingViewModel: ObservableObject {
 
     var isCompleted: Bool { progress.step == .completed }
     var presentedError: String? {
-        errorMessage ?? (progress.step == .choice ? nil : settings.errorMessage)
+        errorMessage ?? (progress.step == .choice ? nil : settings.visibleErrorMessage)
     }
 
     func goBack() { cancelChatGPTSignIn(); errorMessage = nil; progress.goBack() }
@@ -148,7 +148,7 @@ final class OnboardingViewModel: ObservableObject {
         isSigningInWithChatGPT = false
         guard settings.codexAuthState.planUsageEnabled else {
             progress.step = .choice
-            errorMessage = settings.errorMessage ?? "ChatGPTプランの利用が許可されませんでした。"
+            errorMessage = settings.visibleErrorMessage ?? "ChatGPTプランの利用が許可されませんでした。"
             return
         }
         progress.step = .model
@@ -226,8 +226,8 @@ final class OnboardingViewModel: ObservableObject {
         }
         settings.errorMessage = nil
         settings.flushPendingSettingsSave()
-        if let error = settings.errorMessage {
-            errorMessage = error
+        if settings.errorMessage != nil {
+            errorMessage = settings.visibleErrorMessage
             return
         }
         do {
@@ -241,7 +241,6 @@ final class OnboardingViewModel: ObservableObject {
             }
             progress.step = .completed
         } catch {
-            errorMessage = error.localizedDescription
             DiagnosticsLogger.log("Onboarding completion failed", category: .app, error: error)
         }
     }

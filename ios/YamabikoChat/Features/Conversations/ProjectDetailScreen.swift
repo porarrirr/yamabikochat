@@ -77,19 +77,19 @@ struct ProjectDetailScreen: View {
             case let .success(urls):
                 viewModel.importProjectWorkspaceFiles(projectId: projectId, urls: urls)
             case let .failure(error):
-                viewModel.errorMessage = error.localizedDescription
+                viewModel.recordFailure(error)
             }
         }
         .alert(
             L10n.text("エラー"),
             isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
+                get: { viewModel.visibleErrorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )
         ) {
             Button(L10n.text("OK")) { viewModel.errorMessage = nil }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            Text(viewModel.visibleErrorMessage ?? "")
         }
         .sheet(isPresented: $isInstructionsPresented) {
             if let project {

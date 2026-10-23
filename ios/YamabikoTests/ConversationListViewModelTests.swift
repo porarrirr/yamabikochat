@@ -24,6 +24,21 @@ private final class ConversationListTestCredentialStore: SecureCredentialStore {
 
 @MainActor
 final class ConversationListViewModelTests: XCTestCase {
+    @MainActor
+    func testTechnicalFailureIsHiddenAndInputGuidanceRemainsVisible() {
+        let viewModel = ConversationListViewModel()
+        let error = NSError(domain: "DiagnosticOnly", code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "Response parse failed: timeout"])
+        viewModel.recordFailure(error)
+        XCTAssertEqual(viewModel.errorMessage, error.localizedDescription)
+        XCTAssertNil(viewModel.visibleErrorMessage)
+
+        viewModel.errorMessage = "APIキーを入力してください"
+        XCTAssertEqual(viewModel.visibleErrorMessage, viewModel.errorMessage)
+        viewModel.errorMessage = nil
+        XCTAssertNil(viewModel.visibleErrorMessage)
+    }
+
     func testColdLaunchSelectsEmptyNewChatInsteadOfExistingHistory() throws {
         let repository = try makeFixture()
         let historyID = try repository.createConversation(title: "Previous conversation")

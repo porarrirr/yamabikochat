@@ -180,7 +180,7 @@ struct SettingsDetailScreen: View {
             case let .success(urls):
                 if let url = urls.first { viewModel.inspectAgentSkill(at: url) }
             case let .failure(error):
-                viewModel.errorMessage = error.localizedDescription
+                viewModel.recordFailure(error)
             }
         }
         .sheet(item: $viewModel.agentSkillInstallPreview, onDismiss: viewModel.discardAgentSkillPreview) { preview in
@@ -695,11 +695,11 @@ struct SettingsDetailScreen: View {
                 case .loading:
                     ProgressView("models.devからモデル一覧を読み込み中...")
                 case .stale:
-                    Text("保存済み一覧を表示中: \(viewModel.modelsDevCatalogState.error ?? "更新失敗")")
+                    Text("保存済み一覧を表示中")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 case .error:
-                    Text(viewModel.modelsDevCatalogState.error ?? "models.devからモデル一覧を取得できませんでした")
+                    Text("モデル一覧を取得できませんでした")
                         .font(.caption2)
                         .foregroundStyle(.red)
                 default:
@@ -931,12 +931,6 @@ struct SettingsDetailScreen: View {
                 }
             }
 
-            if let error = viewModel.openCodeGoUsageError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.vertical, 4)
-            }
         }
         .task {
             await viewModel.retrieveOpenCodeGoUsageIfNeeded(apiKey: apiKey)
@@ -1400,10 +1394,10 @@ struct SettingsDetailScreen: View {
                 case .loading:
                     ProgressView("モデル一覧を読み込み中...")
                 case .stale:
-                    Text("保存済み一覧を表示中: \(viewModel.modelsDevCatalogState.error ?? "更新失敗")")
+                    Text("保存済み一覧を表示中")
                         .font(.caption2).foregroundStyle(.orange)
                 case .error:
-                    Text(viewModel.modelsDevCatalogState.error ?? "モデル一覧を取得できませんでした")
+                    Text("モデル一覧を取得できませんでした")
                         .font(.caption2).foregroundStyle(.red)
                 default:
                     EmptyView()
@@ -1438,8 +1432,8 @@ struct SettingsDetailScreen: View {
 
                 if viewModel.codexModelsLoading {
                     ProgressView("モデル一覧を読み込み中...")
-                } else if let error = viewModel.codexModelsError {
-                    Text("モデル一覧を取得できませんでした: \(error)")
+                } else if viewModel.codexModelsError != nil {
+                    Text("モデル一覧を取得できませんでした")
                         .font(.caption2)
                         .foregroundStyle(.red)
                 }
@@ -1977,7 +1971,7 @@ private struct SettingsStatusFooter: View {
                     .font(.caption)
                     .foregroundStyle(.green)
             }
-            if let error = viewModel.errorMessage {
+            if let error = viewModel.visibleErrorMessage {
                 HStack(alignment: .top) {
                     Text(error)
                         .font(.caption)

@@ -10,7 +10,21 @@ final class ConversationListViewModel: ObservableObject {
     @Published private(set) var isImportingProjectFiles: Bool = false
     @Published var searchQuery: String = ""
     @Published var selectedProjectId: Int64?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { isDiagnosticError = false }
+    }
+    @Published private var isDiagnosticError = false
+
+    /// Input guidance remains visible; technical failures belong in diagnostics.
+    var visibleErrorMessage: String? {
+        isDiagnosticError ? nil : errorMessage
+    }
+
+    func recordFailure(_ error: Error, operation: String = #function) {
+        errorMessage = error.localizedDescription
+        isDiagnosticError = true
+        DiagnosticsLogger.log(operation, level: .error, category: .chat, error: error)
+    }
     @Published var isSelectionMode: Bool = false
     @Published var selectedConversationIds: Set<Int64> = []
 
@@ -46,7 +60,7 @@ final class ConversationListViewModel: ObservableObject {
         do {
             _ = try repository.ensureInitialConversation()
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
 
         Publishers.CombineLatest($searchQuery.removeDuplicates(), $selectedProjectId.removeDuplicates())
@@ -72,7 +86,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return conversationID
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return nil
         }
     }
@@ -87,7 +101,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return conversationID
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return nil
         }
     }
@@ -99,7 +113,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return id
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return nil
         }
     }
@@ -124,7 +138,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return false
         }
     }
@@ -137,7 +151,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return false
         }
     }
@@ -147,7 +161,7 @@ final class ConversationListViewModel: ObservableObject {
         do {
             try repository.assignConversationToProject(conversationId: id, projectId: projectId)
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -190,7 +204,7 @@ final class ConversationListViewModel: ObservableObject {
             projectWorkspaceFiles[projectId] = try repository.projectWorkspaceFiles(projectId: projectId)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -206,7 +220,7 @@ final class ConversationListViewModel: ObservableObject {
                 )
                 errorMessage = nil
             } catch {
-                errorMessage = error.localizedDescription
+                recordFailure(error)
             }
         }
     }
@@ -220,7 +234,7 @@ final class ConversationListViewModel: ObservableObject {
             )
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -229,7 +243,7 @@ final class ConversationListViewModel: ObservableObject {
         do {
             try repository.deleteConversation(id: id)
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 
@@ -244,7 +258,7 @@ final class ConversationListViewModel: ObservableObject {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
             return false
         }
     }
@@ -272,7 +286,7 @@ final class ConversationListViewModel: ObservableObject {
                 filtered = base.filter { ids.contains($0.id) }
             } catch {
                 filtered = []
-                errorMessage = error.localizedDescription
+                recordFailure(error)
                 DiagnosticsLogger.log("Siri in-app search failed", category: .app, error: error)
             }
         } else if query.isEmpty {
@@ -333,7 +347,7 @@ final class ConversationListViewModel: ObservableObject {
             try repository.deleteConversations(ids: selectedConversationIds)
             exitSelectionMode()
         } catch {
-            errorMessage = error.localizedDescription
+            recordFailure(error)
         }
     }
 

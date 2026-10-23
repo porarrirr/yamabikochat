@@ -42,11 +42,6 @@ struct OpenRouterModelPickerField: View {
                 ProgressView(L10n.text("読み込み中..."))
             }
 
-            if let error, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
 
             TextField(L10n.text("Custom Model ID"), text: $model)
                 .textInputAutocapitalization(.never)
@@ -106,11 +101,6 @@ struct OpenRouterModelListView: View {
         .safeAreaInset(edge: .bottom) {
             if isLoading {
                 ProgressView(L10n.text("読み込み中..."))
-                    .padding(8)
-            } else if let error, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
                     .padding(8)
             }
         }

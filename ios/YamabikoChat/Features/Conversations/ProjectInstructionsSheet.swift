@@ -32,7 +32,7 @@ struct ProjectInstructionsSheet: View {
 
                 // Save button
                 VStack(spacing: 0) {
-                    if let error = viewModel.errorMessage {
+                    if let error = viewModel.visibleErrorMessage {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)

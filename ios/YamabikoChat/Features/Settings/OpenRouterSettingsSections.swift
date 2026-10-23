@@ -123,11 +123,6 @@ struct OpenRouterSettingsSections: View {
                 ProgressView("Endpointを読み込み中...")
             }
 
-            if let error = viewModel.openRouterEndpointsError, !error.isEmpty {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-            }
 
             ForEach(viewModel.openRouterEndpointOptions) { endpoint in
                 OpenRouterEndpointRow(
