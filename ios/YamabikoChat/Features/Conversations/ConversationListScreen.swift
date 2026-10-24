@@ -95,25 +95,6 @@ struct ConversationListScreen: View {
             }
             Button(L10n.text("キャンセル"), role: .cancel) {}
         }
-        .confirmationDialog(
-            L10n.text("この会話を削除しますか？"),
-            isPresented: Binding(
-                get: { conversationPendingDeletion != nil },
-                set: { if !$0 { conversationPendingDeletion = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(L10n.text("削除"), role: .destructive) {
-                if let id = conversationPendingDeletion {
-                    if selection == id { selection = nil }
-                    viewModel.deleteConversation(id: id)
-                }
-                conversationPendingDeletion = nil
-            }
-            Button(L10n.text("キャンセル"), role: .cancel) {
-                conversationPendingDeletion = nil
-            }
-        }
     }
 
     // MARK: - Conversations Main View
@@ -532,6 +513,29 @@ struct ConversationListScreen: View {
         }
         .siriConversationContext(id: entry.id, isSecret: entry.isSecret)
         .buttonStyle(.plain)
+        .accessibilityIdentifier("conversation-row-\(entry.id)")
+        // Anchor the popover to this row, not the entire sidebar.
+        .confirmationDialog(
+            L10n.text("この会話を削除しますか？"),
+            isPresented: Binding(
+                get: { conversationPendingDeletion == entry.id },
+                set: { isPresented in
+                    if !isPresented && conversationPendingDeletion == entry.id {
+                        conversationPendingDeletion = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("削除"), role: .destructive) {
+                if selection == entry.id { selection = nil }
+                viewModel.deleteConversation(id: entry.id)
+                conversationPendingDeletion = nil
+            }
+            Button(L10n.text("キャンセル"), role: .cancel) {
+                conversationPendingDeletion = nil
+            }
+        }
         .accessibilityValue(viewModel.selectedConversationIds.contains(entry.id) ? Text(L10n.text("選択済み")) : Text(""))
         .contextMenu(viewModel.isSelectionMode ? nil : ContextMenu {
             Button {

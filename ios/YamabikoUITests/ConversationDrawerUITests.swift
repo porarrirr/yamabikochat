@@ -186,6 +186,54 @@ final class ConversationDrawerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["削除"].waitForExistence(timeout: 5), app.debugDescription)
     }
 
+    func testConversationDeletionPopoverIsAnchoredToItsRow() {
+        let app = launchConversation()
+        app.buttons["chat-history-button"].tap()
+        let candidate = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Text Selection Fixture")
+        ).firstMatch
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+        let row = app.buttons[candidate.identifier]
+        row.press(forDuration: 1)
+        app.buttons["削除"].tap()
+        XCTAssertTrue(app.staticTexts["この会話を削除しますか？"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Deletion popover anchored to conversation row")
+        app.buttons["削除"].tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["sidebar-new-chat"].isHittable)
+    }
+
+    func testProjectDeletionPopoversAreAnchoredToRowAndOptionsButton() {
+        let app = launchConversation()
+        app.buttons["chat-history-button"].tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "プロジェクト")).firstMatch.tap()
+        let candidate = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "project-row-")).firstMatch
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+        let row = app.buttons[candidate.identifier]
+        row.press(forDuration: 1)
+        app.buttons["プロジェクトを削除する"].tap()
+        XCTAssertTrue(app.buttons["プロジェクトのみ削除"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Deletion popover anchored to project row")
+        // Dismiss without deleting, then verify the detail screen's separate anchor.
+        app.staticTexts["プロジェクト"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["プロジェクトのみ削除"].waitForNonExistence(timeout: 5))
+        row.tap()
+        app.buttons["プロジェクトオプション"].tap()
+        app.buttons["プロジェクトを削除する"].tap()
+        XCTAssertTrue(app.buttons["プロジェクトのみ削除"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Deletion popover anchored to project options")
+        app.buttons["プロジェクトのみ削除"].tap()
+        XCTAssertTrue(app.buttons["新しいプロジェクト"].waitForExistence(timeout: 5))
+        XCTAssertFalse(row.exists)
+    }
+
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     private func launchConversation() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [

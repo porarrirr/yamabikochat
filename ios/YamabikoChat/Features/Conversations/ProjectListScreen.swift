@@ -2,12 +2,6 @@ import SwiftUI
 
 struct ProjectListScreen: View {
     @Environment(\.appAccent) private var appAccent
-    private struct PendingProjectDeletion {
-        let id: Int64
-        let title: String
-        let conversationCount: Int
-    }
-
     @ObservedObject var viewModel: ConversationListViewModel
     var onBack: () -> Void
     var onSelectProject: (Int64) -> Void
@@ -16,8 +10,7 @@ struct ProjectListScreen: View {
     @State private var isCreateProjectPresented: Bool = false
     @State private var editingInstructionsProject: ProjectListEntry?
     @State private var editingDetailsProject: ProjectListEntry?
-    @State private var pendingProjectDeletion: PendingProjectDeletion?
-    @State private var isProjectDeleteOptionsPresented: Bool = false
+    @State private var pendingProjectDeletion: ProjectListEntry?
 
     private var normalizedSearchQuery: String {
         searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -85,33 +78,6 @@ struct ProjectListScreen: View {
                     iconName: iconName,
                     colorHex: colorHex
                 )
-            }
-        }
-        .confirmationDialog(
-            L10n.text("プロジェクトを削除"),
-            isPresented: $isProjectDeleteOptionsPresented,
-            titleVisibility: .visible
-        ) {
-            Button(role: .destructive) {
-                guard let pending = pendingProjectDeletion else { return }
-                if viewModel.deleteProject(id: pending.id, mode: .projectOnly) {
-                    pendingProjectDeletion = nil
-                }
-            } label: {
-                Text(L10n.text("プロジェクトのみ削除"))
-            }
-
-            Button(role: .destructive) {
-                guard let pending = pendingProjectDeletion else { return }
-                if viewModel.deleteProject(id: pending.id, mode: .withConversations) {
-                    pendingProjectDeletion = nil
-                }
-            } label: {
-                Text(L10n.text("会話も削除"))
-            }
-
-            Button(L10n.text("キャンセル"), role: .cancel) {
-                pendingProjectDeletion = nil
             }
         }
     }
@@ -238,6 +204,38 @@ struct ProjectListScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("project-row-\(project.id)")
+        .confirmationDialog(
+            L10n.text("プロジェクトを削除"),
+            isPresented: Binding(
+                get: { pendingProjectDeletion?.id == project.id },
+                set: { isPresented in
+                    if !isPresented && pendingProjectDeletion?.id == project.id {
+                        pendingProjectDeletion = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(role: .destructive) {
+                if viewModel.deleteProject(id: project.id, mode: .projectOnly) {
+                    pendingProjectDeletion = nil
+                }
+            } label: {
+                Text(L10n.text("プロジェクトのみ削除"))
+            }
+
+            Button(role: .destructive) {
+                if viewModel.deleteProject(id: project.id, mode: .withConversations) {
+                    pendingProjectDeletion = nil
+                }
+            } label: {
+                Text(L10n.text("会話も削除"))
+            }
+
+            Button(L10n.text("キャンセル"), role: .cancel) {
+                pendingProjectDeletion = nil
+            }
+        }
         .contextMenu {
             Button {
                 editingDetailsProject = project
@@ -302,11 +300,6 @@ struct ProjectListScreen: View {
     }
 
     private func beginProjectDeletion(_ project: ProjectListEntry) {
-        pendingProjectDeletion = PendingProjectDeletion(
-            id: project.id,
-            title: project.title,
-            conversationCount: viewModel.projectConversationCount(projectId: project.id)
-        )
-        isProjectDeleteOptionsPresented = true
+        pendingProjectDeletion = project
     }
 }

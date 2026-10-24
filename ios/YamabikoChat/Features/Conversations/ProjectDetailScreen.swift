@@ -123,29 +123,6 @@ struct ProjectDetailScreen: View {
                 }
             }
         }
-        .confirmationDialog(
-            L10n.text("プロジェクトを削除"),
-            isPresented: $isDeleteConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button(role: .destructive) {
-                if viewModel.deleteProject(id: projectId, mode: .projectOnly) {
-                    onBack()
-                }
-            } label: {
-                Text(L10n.text("プロジェクトのみ削除"))
-            }
-
-            Button(role: .destructive) {
-                if viewModel.deleteProject(id: projectId, mode: .withConversations) {
-                    onBack()
-                }
-            } label: {
-                Text(L10n.text("会話も削除"))
-            }
-
-            Button(L10n.text("キャンセル"), role: .cancel) {}
-        }
     }
 
     // MARK: - Header Bar
@@ -210,6 +187,29 @@ struct ProjectDetailScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(L10n.text("プロジェクトオプション")))
+            .confirmationDialog(
+                L10n.text("プロジェクトを削除"),
+                isPresented: $isDeleteConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button(role: .destructive) {
+                    if viewModel.deleteProject(id: projectId, mode: .projectOnly) {
+                        onBack()
+                    }
+                } label: {
+                    Text(L10n.text("プロジェクトのみ削除"))
+                }
+
+                Button(role: .destructive) {
+                    if viewModel.deleteProject(id: projectId, mode: .withConversations) {
+                        onBack()
+                    }
+                } label: {
+                    Text(L10n.text("会話も削除"))
+                }
+
+                Button(L10n.text("キャンセル"), role: .cancel) {}
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
