@@ -28,6 +28,30 @@ final class ConversationDrawerTests: XCTestCase {
         XCTAssertFalse(shouldOpen(offset: 120, translation: -200, velocity: 0))
     }
 
+    func testDrawerCardLiftsOffTrueBlackInDarkModeAndDimsInLightMode() {
+        var darkWhite: CGFloat = 0
+        var darkAlpha: CGFloat = 0
+        XCTAssertTrue(
+            UIColor.amoledDrawerCardVeil
+                .resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
+                .getWhite(&darkWhite, alpha: &darkAlpha)
+        )
+        // A black scrim over an AMOLED canvas is invisible, so dark mode must
+        // lighten the conversation card to show the drawer boundary.
+        XCTAssertGreaterThan(darkWhite, 0.5)
+        XCTAssertGreaterThan(darkAlpha, 0.05)
+
+        var lightWhite: CGFloat = 0
+        var lightAlpha: CGFloat = 0
+        XCTAssertTrue(
+            UIColor.amoledDrawerCardVeil
+                .resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+                .getWhite(&lightWhite, alpha: &lightAlpha)
+        )
+        XCTAssertLessThan(lightWhite, 0.5)
+        XCTAssertEqual(lightAlpha, 0.14, accuracy: 0.01)
+    }
+
     func testSidebarLeavesConversationVisibleOnNarrowAndWidePhones() {
         for width: CGFloat in [320, 390, 440, 600] {
             let sidebarWidth = ConversationDrawerGesturePolicy.sidebarWidth(containerWidth: width)

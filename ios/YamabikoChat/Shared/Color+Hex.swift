@@ -44,6 +44,16 @@ extension UIColor {
     static let amoledTertiaryLabel = amoled(.tertiaryLabel, dark: UIColor(white: 0.62, alpha: 1))
     static let amoledPlaceholderText = amoled(.placeholderText, dark: UIColor(white: 0.62, alpha: 1))
     static let amoledSeparator = amoled(.separator, dark: UIColor(white: 0.3, alpha: 1))
+
+    // The compact drawer moves the conversation over a true black sidebar.
+    // Dimming cannot separate two black surfaces, so dark mode lifts the card
+    // with a light veil and a hairline instead; light mode keeps the dim scrim.
+    static let amoledDrawerCardVeil = amoled(
+        .black.withAlphaComponent(0.14), dark: UIColor(white: 1, alpha: 0.08)
+    )
+    static let amoledDrawerCardBorder = amoled(
+        .black.withAlphaComponent(0.08), dark: UIColor(white: 1, alpha: 0.2)
+    )
 }
 
 struct AMOLEDForm<Content: View>: View {

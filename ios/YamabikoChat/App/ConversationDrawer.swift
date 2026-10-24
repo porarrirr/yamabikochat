@@ -78,6 +78,7 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
     var onOpenChanged: ((Bool) -> Void)?
 
     private let detailCard = UIView()
+    private let detailCardBorder = UIView()
     private let dismissalButton = UIButton(type: .custom)
     private lazy var pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     private var isOpen = false
@@ -115,11 +116,23 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
         detailCard.addSubview(detailHost.view)
         detailHost.didMove(toParent: self)
 
-        dismissalButton.backgroundColor = UIColor.black.withAlphaComponent(0.14)
+        dismissalButton.backgroundColor = .amoledDrawerCardVeil
         dismissalButton.accessibilityLabel = L10n.text("閉じる")
         dismissalButton.accessibilityIdentifier = "conversation-drawer-dismiss"
         dismissalButton.addTarget(self, action: #selector(closeDrawer), for: .touchUpInside)
         detailCard.addSubview(dismissalButton)
+
+        // Outline the lifted card so its edge stays visible even when the
+        // conversation behind the drawer is empty.
+        detailCardBorder.isUserInteractionEnabled = false
+        detailCardBorder.alpha = 0
+        detailCardBorder.layer.cornerCurve = .continuous
+        detailCard.addSubview(detailCardBorder)
+        updateDetailCardBorderColor()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) {
+            (controller: ConversationDrawerController<Sidebar, Detail>, _: UITraitCollection) in
+            controller.updateDetailCardBorderColor()
+        }
 
         pan.delegate = self
         pan.maximumNumberOfTouches = 1
@@ -181,14 +194,27 @@ final class ConversationDrawerController<Sidebar: View, Detail: View>: UIViewCon
             detailCard.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
             detailHost.view.frame = detailCard.bounds
             dismissalButton.frame = detailCard.bounds
+            detailCardBorder.frame = detailCard.bounds
         }
+        let borderWidth = 1 / max(traitCollection.displayScale, 1)
+        if detailCardBorder.layer.borderWidth != borderWidth {
+            detailCardBorder.layer.borderWidth = borderWidth
+        }
+        updateDetailCardBorderColor()
     }
 
     private func updatePresentation() {
         detailCard.transform = CGAffineTransform(translationX: offset, y: 0)
         let progress = sidebarWidth > 0 ? offset / sidebarWidth : 0
         detailCard.layer.cornerRadius = 24 * progress
+        detailCardBorder.layer.cornerRadius = detailCard.layer.cornerRadius
+        detailCardBorder.alpha = progress
         dismissalButton.alpha = progress
+    }
+
+    private func updateDetailCardBorderColor() {
+        detailCardBorder.layer.borderColor = UIColor.amoledDrawerCardBorder
+            .resolvedColor(with: traitCollection).cgColor
     }
 
     private func updateInteraction() {
