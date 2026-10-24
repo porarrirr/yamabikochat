@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AutoConversationSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var selectedSide: DualModelSide = .a
 
     private var isUnlimitedTurns: Bool {
         viewModel.settings.autoMaxTurns <= 0
@@ -26,16 +27,25 @@ struct AutoConversationSettingsSection: View {
                     set: { viewModel.setAutoConversationEnabled($0) }
                 ))
 
-            } header: {
-                Text(L10n.text("自動会話"))
             }
 
             if viewModel.settings.isAutoConversationEnabled {
-                Section(L10n.text("AI モデル A（会話開始側）")) {
+                Section {
+                    Picker(L10n.text("Model"), selection: $selectedSide) {
+                        Text(L10n.text("Model A")).tag(DualModelSide.a)
+                        Text(L10n.text("Model B")).tag(DualModelSide.b)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("conversation-model-side")
+                } footer: {
+                    Text(selectedSide == .a ? "モデルAから会話を開始します。" : "モデルBが応答します。")
+                }
+
+                if selectedSide == .a {
                     DualAutoModelSideForm(
-                        providerTitleKey: "Auto provider A",
+                        providerTitleKey: "プロバイダー",
                         provider: $viewModel.settings.autoProviderA,
-                        modelTitleKey: "Auto model A",
+                        modelTitleKey: "Model",
                         model: $viewModel.settings.autoModelA,
                         systemPromptTitleKey: "Auto system prompt A",
                         systemPrompt: $viewModel.settings.autoSystemPromptA,
@@ -46,18 +56,15 @@ struct AutoConversationSettingsSection: View {
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoA,
-                        systemPromptLineLimit: 2 ... 6,
                         pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
                         codexModels: viewModel.codexModels,
                         initialModel: viewModel.initialModelForSlot
                     )
-                }
-
-                Section(L10n.text("AI モデル B（応答側）")) {
+                } else {
                     DualAutoModelSideForm(
-                        providerTitleKey: "Auto provider B",
+                        providerTitleKey: "プロバイダー",
                         provider: $viewModel.settings.autoProviderB,
-                        modelTitleKey: "Auto model B",
+                        modelTitleKey: "Model",
                         model: $viewModel.settings.autoModelB,
                         systemPromptTitleKey: "Auto system prompt B",
                         systemPrompt: $viewModel.settings.autoSystemPromptB,
@@ -68,12 +75,16 @@ struct AutoConversationSettingsSection: View {
                         openRouterModelsError: viewModel.openRouterModelsError,
                         onRefreshOpenRouterModels: { Task { await viewModel.refreshOpenRouterModels(force: false) } },
                         onProviderPresetSelected: applyProviderPresetToAutoB,
-                        systemPromptLineLimit: 2 ... 6,
                         pccReasoningLevel: $viewModel.settings.pccReasoningLevel,
                         codexModels: viewModel.codexModels,
                         initialModel: viewModel.initialModelForSlot
                     )
                 }
+
+                ConversationAdvancedSettingsSection {
+                    AutoConversationOverridesForm(viewModel: viewModel, side: selectedSide)
+                }
+                .id(selectedSide)
 
                 Section(L10n.text("会話設定")) {
                     Text(maxTurnsLabel)

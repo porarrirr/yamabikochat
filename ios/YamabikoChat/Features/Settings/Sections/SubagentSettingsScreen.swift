@@ -172,15 +172,16 @@ private struct SubagentProfileEditor: View {
             Section {
                 Button("モデル設定を削除", role: .destructive) { confirmsDeletion = true }
                     .accessibilityIdentifier("subagent-profile-delete")
+                    .alert("このモデル設定を削除しますか？", isPresented: $confirmsDeletion) {
+                        Button("削除", role: .destructive) {
+                            dismiss()
+                            onDelete()
+                        }
+                        Button("キャンセル", role: .cancel) {}
+                    }
             }
             Section("チャットでの指定") {
                 Text("「\(profile.name) で調査して」のように依頼できます。")
-            }
-        }
-        .confirmationDialog("このモデル設定を削除しますか？", isPresented: $confirmsDeletion, titleVisibility: .visible) {
-            Button("削除", role: .destructive) {
-                dismiss()
-                onDelete()
             }
         }
         .navigationTitle(profile.name)

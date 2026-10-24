@@ -84,7 +84,13 @@ final class SubagentUITests: XCTestCase {
         for _ in 0..<5 where !delete.isHittable { app.swipeUp() }
         XCTAssertTrue(delete.exists)
         delete.tap()
-        app.buttons["削除"].tap()
+        // The confirmation must be a centered alert; anchoring a confirmation
+        // dialog to the form itself places it over the delete row.
+        let confirmation = app.alerts["このモデル設定を削除しますか？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.popovers.count, 0)
+        capture("subagents-model-delete-confirmation")
+        confirmation.buttons["削除"].tap()
         XCTAssertTrue(app.buttons["subagent-profile-add"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["モデル設定 1"].exists)
         capture("subagents-model-deleted")

@@ -655,6 +655,55 @@ final class SettingsViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testClearingModelsDevReasoningEffortRemovesPersistedAndCachedValueWithoutCatalog() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        viewModel.modelsDevCatalogState = .init()
+        let field = ModelsDevReasoningPreference.fieldName(modelID: "reasoning-model")
+        let key = ModelsDevReasoningPreference.fieldKey(providerID: "example", fieldName: field)
+        let otherKey = ModelsDevReasoningPreference.fieldKey(
+            providerID: "example",
+            fieldName: ModelsDevReasoningPreference.fieldName(modelID: "other-model")
+        )
+        try fixture.credentials.saveSecret("high", key: key)
+        try fixture.credentials.saveSecret("low", key: otherKey)
+        XCTAssertEqual(viewModel.modelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model"), "high")
+
+        viewModel.saveModelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model", effort: "")
+
+        XCTAssertNil(try fixture.credentials.readSecret(key: key))
+        XCTAssertEqual(viewModel.modelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model"), "")
+        XCTAssertEqual(try fixture.credentials.readSecret(key: otherKey), "low")
+        XCTAssertNil(viewModel.errorMessage)
+
+        // Deletion bypasses catalog validation; selecting a new effort still requires it.
+        viewModel.saveModelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model", effort: "high")
+        XCTAssertNil(try fixture.credentials.readSecret(key: key))
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
+
+    @MainActor
+    func testFailedModelsDevReasoningEffortResetPreservesSavedValueAndReportsError() throws {
+        let fixture = try makeFixture()
+        let viewModel = SettingsViewModel()
+        viewModel.bind(repository: fixture.repository, credentialStore: fixture.credentials)
+        let key = ModelsDevReasoningPreference.fieldKey(
+            providerID: "example",
+            fieldName: ModelsDevReasoningPreference.fieldName(modelID: "reasoning-model")
+        )
+        try fixture.credentials.saveSecret("high", key: key)
+        XCTAssertEqual(viewModel.modelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model"), "high")
+        fixture.credentials.failingKey = key
+
+        viewModel.saveModelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model", effort: "")
+
+        XCTAssertEqual(try fixture.credentials.readSecret(key: key), "high")
+        XCTAssertEqual(viewModel.modelsDevReasoningEffort(providerID: "example", modelID: "reasoning-model"), "high")
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
+
+    @MainActor
     func testSystemPromptEditsAutoSavePresetAfterDebounce() async throws {
         let fixture = try makeFixture()
         let viewModel = SettingsViewModel()

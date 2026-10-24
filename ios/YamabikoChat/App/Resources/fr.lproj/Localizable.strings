@@ -643,3 +643,17 @@
 
 "xAIの接続を解除してログアウトしました" = "Connexion xAI révoquée et déconnexion effectuée";
 "xAIのログアウトを完了できませんでした。アプリを終了し、Grokのアカウント設定で接続済みアプリとセッションを確認してください。" = "La déconnexion de xAI n’a pas pu être terminée. Quittez l’app et vérifiez les applications connectées et les sessions dans les paramètres de votre compte Grok.";
+
+"%@: Reasoning Effort" = "%@ : Effort de raisonnement";
+"%@: ChatGPTのモデル一覧を取得すると推論Effortを選択できます" = "%@ : Chargez la liste des modèles ChatGPT pour choisir l’effort de raisonnement";
+"%@（現在は非対応）" = "%@ (non pris en charge actuellement)";
+
+"Reasoning enabled" = "Activer le raisonnement";
+
+"Thinking level" = "Niveau de réflexion";
+
+"Thinking budget" = "Budget de réflexion";
+
+"個別設定をリセット" = "Réinitialiser les réglages du modèle";
+
+"Thinking enabled" = "Activer la réflexion";

@@ -72,11 +72,13 @@ enum AppStoreScreenshotDemoSeeder {
         )
         let isGenUIFixture = ProcessInfo.processInfo.arguments.contains("-GenUIFixture")
             || ProcessInfo.processInfo.arguments.contains("-GenUIRichFixture")
+        let isAutoConversationFixture = ProcessInfo.processInfo.arguments.contains("-AutoConversationFixture")
         var settings = try chatRepository.loadSettings()
         settings.themeMode = isReasoningEffortFixture || ProcessInfo.processInfo.arguments.contains("-GenUIDarkFixture") ? "DARK" : "LIGHT"
         settings.dynamicColorEnabled = true
-        settings.isDualModeEnabled = !isReasoningEffortFixture && !isGenUIFixture && !ProcessInfo.processInfo.arguments.contains("-SubagentFixture")
-        settings.isAutoConversationEnabled = false
+        settings.isDualModeEnabled = !isAutoConversationFixture && !isReasoningEffortFixture && !isGenUIFixture
+            && !ProcessInfo.processInfo.arguments.contains("-SubagentFixture")
+        settings.isAutoConversationEnabled = isAutoConversationFixture
         settings.apiProvider = isReasoningEffortFixture ? "CODEX_AUTH" : "OPENROUTER"
         settings.defaultModel = isReasoningEffortFixture ? "gpt-5.6-terra" : "openai/gpt-4o-mini"
         settings.codexReasoningEnabled = true
@@ -85,6 +87,12 @@ enum AppStoreScreenshotDemoSeeder {
         settings.dualModelA = "gpt-4o-mini"
         settings.dualProviderB = "GEMINI"
         settings.dualModelB = "gemini-2.5-flash-preview"
+        if isAutoConversationFixture {
+            settings.autoProviderA = "GEMINI"
+            settings.autoModelA = "gemini-2.5-flash"
+            settings.autoProviderB = "OPENROUTER"
+            settings.autoModelB = "deepseek/deepseek-chat"
+        }
         if ProcessInfo.processInfo.arguments.contains("-SubagentFixture") {
             settings.apiProvider = "GEMINI"
             settings.defaultModel = "gemini-2.5-flash"

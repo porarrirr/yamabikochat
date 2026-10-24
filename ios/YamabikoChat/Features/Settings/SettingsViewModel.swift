@@ -359,16 +359,19 @@ final class SettingsViewModel: ObservableObject {
 
     func saveModelsDevReasoningEffort(providerID: String, modelID: String, effort: String) {
         let normalized = effort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard let model = modelsDevCatalogState.providers
-            .first(where: { $0.id == providerID.lowercased() })?
-            .models.first(where: { $0.id == modelID })
-        else {
-            errorMessage = L10n.text("選択したモデルをmodels.devカタログで確認できません。")
-            return
-        }
-        guard normalized.isEmpty || model.supportedReasoningEfforts.contains(normalized) else {
-            errorMessage = L10n.text("このReasoning effortは選択したモデルでサポートされていません。")
-            return
+        // Clearing a saved preference must also work when the catalog is unavailable.
+        if !normalized.isEmpty {
+            guard let model = modelsDevCatalogState.providers
+                .first(where: { $0.id == providerID.lowercased() })?
+                .models.first(where: { $0.id == modelID })
+            else {
+                errorMessage = L10n.text("選択したモデルをmodels.devカタログで確認できません。")
+                return
+            }
+            guard model.supportedReasoningEfforts.contains(normalized) else {
+                errorMessage = L10n.text("このReasoning effortは選択したモデルでサポートされていません。")
+                return
+            }
         }
         do {
             let key = modelsDevFieldKey(

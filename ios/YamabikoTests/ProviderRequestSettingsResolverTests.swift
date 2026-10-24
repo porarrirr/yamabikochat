@@ -104,6 +104,45 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.type == "google_search" })
     }
 
+    func testAutoOverridesTakePriorityOverProviderGlobals() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.geminiThinkingEnabled = true
+        settings.geminiThinkingBudget = 2048
+        settings.geminiGoogleSearchEnabled = true
+        settings.autoThinkingEnabledA = false
+        settings.autoThinkingBudgetA = 1024
+        settings.autoGoogleSearchEnabledA = false
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-2.5-flash",
+            context: .autoA
+        )
+
+        XCTAssertEqual(resolved.thinking?.budget, 0)
+        XCTAssertFalse(resolved.tools.contains { $0.type == "google_search" })
+    }
+
+    func testAutoThinkingLevelOverrideIsResolvedForGeminiLevelModels() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.geminiThinkingEnabled = true
+        settings.geminiThinkingLevel = "low"
+        settings.autoThinkingEnabledB = true
+        settings.autoThinkingLevelB = "high"
+
+        let resolved = try await resolver.resolve(
+            settings: settings,
+            provider: "GEMINI",
+            model: "gemini-3-flash-preview",
+            context: .autoB
+        )
+
+        XCTAssertEqual(resolved.metadata["geminiThinkingLevel"], "high")
+    }
+
     func testGemma4UsesThinkingLevelWithoutBudget() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ModelSlotForm: View {
     let providerTitleKey: String
+    var presetTitleKey: String = "プロバイダープリセット"
     @Binding var provider: String
     let modelTitleKey: String
     @Binding var model: String
@@ -40,7 +41,7 @@ struct ModelSlotForm: View {
 
     var body: some View {
         if !availableProviderPresets.isEmpty {
-            Picker(L10n.text("プロバイダープリセット"), selection: Binding(
+            Picker(L10n.text(presetTitleKey), selection: Binding(
                 get: { selectedProviderPresetKey },
                 set: { key in
                     guard let preset = availableProviderPresets.first(where: { $0.dualAutoPresetKey == key }) else {
@@ -116,7 +117,12 @@ struct ModelSlotForm: View {
         } else if let dynamicProvider = catalogProvider {
             CatalogModelPickerField(modelID: $model, provider: dynamicProvider, title: modelTitleKey)
         } else {
-            TextField(L10n.text(modelTitleKey), text: $model)
+            LabeledContent(L10n.text(modelTitleKey)) {
+                TextField(L10n.text(modelTitleKey), text: $model)
+                    .multilineTextAlignment(.trailing)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
         }
     }
 

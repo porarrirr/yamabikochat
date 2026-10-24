@@ -2,9 +2,7 @@ import SwiftUI
 
 struct DualModeSettingsSection: View {
     @ObservedObject var viewModel: SettingsViewModel
-
-    @State private var modelAOverridesExpanded = false
-    @State private var modelBOverridesExpanded = false
+    @State private var selectedSide: DualModelSide = .a
 
     private var dualSplitRatioBinding: Binding<Double> {
         Binding(
@@ -31,16 +29,24 @@ struct DualModeSettingsSection: View {
                     set: { viewModel.setDualModeEnabled($0) }
                 ))
 
-            } header: {
-                Text(L10n.text("デュアルモード"))
             }
 
             if viewModel.settings.isDualModeEnabled {
-                Section(L10n.text("Model A")) {
+                Section {
+                    Picker(L10n.text("Model"), selection: $selectedSide) {
+                        Text(L10n.text("Model A")).tag(DualModelSide.a)
+                        Text(L10n.text("Model B")).tag(DualModelSide.b)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("conversation-model-side")
+
+                }
+
+                if selectedSide == .a {
                     DualAutoModelSideForm(
-                        providerTitleKey: "Provider A",
+                        providerTitleKey: "プロバイダー",
                         provider: $viewModel.settings.dualProviderA,
-                        modelTitleKey: "Model A",
+                        modelTitleKey: "Model",
                         model: $viewModel.settings.dualModelA,
                         systemPromptTitleKey: "Dual system prompt A",
                         systemPrompt: dualSystemPromptABinding,
@@ -55,13 +61,11 @@ struct DualModeSettingsSection: View {
                         codexModels: viewModel.codexModels,
                         initialModel: viewModel.initialModelForSlot
                     )
-                }
-
-                Section(L10n.text("Model B")) {
+                } else {
                     DualAutoModelSideForm(
-                        providerTitleKey: "Provider B",
+                        providerTitleKey: "プロバイダー",
                         provider: $viewModel.settings.dualProviderB,
-                        modelTitleKey: "Model B",
+                        modelTitleKey: "Model",
                         model: $viewModel.settings.dualModelB,
                         systemPromptTitleKey: "Dual system prompt B",
                         systemPrompt: dualSystemPromptBBinding,
@@ -78,6 +82,11 @@ struct DualModeSettingsSection: View {
                     )
                 }
 
+                ConversationAdvancedSettingsSection {
+                    DualModeOverridesForm(viewModel: viewModel, side: selectedSide)
+                }
+                .id(selectedSide)
+
                 Section(L10n.text("レイアウト")) {
                     Picker(L10n.text("Split layout"), selection: Binding(
                         get: {
@@ -91,31 +100,15 @@ struct DualModeSettingsSection: View {
                         Text(L10n.text("左右分割")).tag("VERTICAL")
                         Text(L10n.text("上下分割")).tag("HORIZONTAL")
                     }
+                    .pickerStyle(.segmented)
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text(splitRatioLabel)
                             .font(.subheadline)
                         Slider(value: dualSplitRatioBinding, in: 0.1 ... 0.9)
                     }
                 }
 
-                Section {
-                    DisclosureGroup(
-                        L10n.text("モデルAの詳細設定"),
-                        isExpanded: $modelAOverridesExpanded
-                    ) {
-                        DualModeOverridesForm(viewModel: viewModel, side: .a)
-                    }
-                }
-
-                Section {
-                    DisclosureGroup(
-                        L10n.text("モデルBの詳細設定"),
-                        isExpanded: $modelBOverridesExpanded
-                    ) {
-                        DualModeOverridesForm(viewModel: viewModel, side: .b)
-                    }
-                }
             }
         }
     }

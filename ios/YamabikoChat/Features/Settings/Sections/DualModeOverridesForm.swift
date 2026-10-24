@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum DualModelSide {
+enum DualModelSide: Hashable {
     case a
     case b
 }
@@ -34,38 +34,51 @@ struct DualModeOverridesForm: View {
         Group {
             providerSpecificControls
 
-            Button(side == .a ? L10n.text("A override をリセット") : L10n.text("B override をリセット")) {
+            Button(L10n.text("個別設定をリセット")) {
                 resetOverrides()
             }
-            .buttonStyle(.bordered)
+            .accessibilityIdentifier("conversation-model-reset")
         }
     }
 
     @ViewBuilder
     private var providerSpecificControls: some View {
-        switch provider {
-        case "GEMINI":
-            geminiControls
-        case "OPENROUTER":
-            openRouterControls
-        case "CODEX_AUTH", "SUPERGROK":
-            reasoningEffortControls
-        default:
-            EmptyView()
+        if let catalogModel = modelsDevCatalogModel {
+            modelsDevReasoningControls(model: catalogModel)
+        } else {
+            switch provider {
+            case "GEMINI":
+                geminiControls
+            case "OPENROUTER":
+                openRouterControls
+            case "CODEX_AUTH", "SUPERGROK":
+                reasoningEffortControls
+            default:
+                EmptyView()
+            }
         }
     }
 
     @ViewBuilder
     private var geminiControls: some View {
-        Toggle(L10n.format("%@: Google Search", prefix), isOn: googleSearchBinding)
-        Toggle(L10n.format("%@: Code Execution", prefix), isOn: codeExecutionBinding)
-        Toggle(L10n.format("%@: URL Context", prefix), isOn: urlContextBinding)
-        Toggle(L10n.format("%@: Google Maps", prefix), isOn: googleMapsBinding)
-        Toggle(L10n.format("%@: Thinking enabled", prefix), isOn: thinkingEnabledBinding)
+        Toggle(L10n.text("Google Search"), isOn: googleSearchBinding)
+        Toggle(L10n.text("Code Execution"), isOn: codeExecutionBinding)
+        Toggle(L10n.text("URL Context"), isOn: urlContextBinding)
+        Toggle(L10n.text("Google Maps"), isOn: googleMapsBinding)
+        Toggle(L10n.text("Thinking enabled"), isOn: thinkingEnabledBinding)
         if GeminiModelUtils.isThinkingLevelSupported(model: model) {
-            TextField(L10n.format("%@: Thinking level override", prefix), text: thinkingLevelBinding)
+            Picker(L10n.text("Thinking level"), selection: thinkingLevelBinding) {
+                Text(L10n.text("inherit")).tag("")
+                if !currentThinkingLevel.isEmpty,
+                   !thinkingLevelOptions.contains(currentThinkingLevel) {
+                    Text(verbatim: unsupportedValueLabel(currentThinkingLevel)).tag(currentThinkingLevel)
+                }
+                ForEach(thinkingLevelOptions, id: \.self) { option in
+                    Text(verbatim: option).tag(option)
+                }
+            }
         } else {
-            TextField(L10n.format("%@: Thinking budget override", prefix), text: thinkingBudgetBinding)
+            TextField(L10n.text("Thinking budget"), text: thinkingBudgetBinding)
                 .keyboardType(.numberPad)
         }
     }
@@ -73,27 +86,27 @@ struct DualModeOverridesForm: View {
     @ViewBuilder
     private var openRouterControls: some View {
         if let capabilities = openRouterReasoningCapabilities {
-            Picker(L10n.format("%@: OpenRouter reasoning mode", prefix), selection: openRouterReasoningModeBinding) {
+            Picker(L10n.text("Reasoning mode"), selection: openRouterReasoningModeBinding) {
                 Text(L10n.text("inherit")).tag("inherit")
                 ForEach(openRouterReasoningModes, id: \.self) { mode in
                     Text(verbatim: mode).tag(mode)
                 }
             }
-            Toggle(L10n.format("%@: OpenRouter thinking enabled", prefix), isOn: openRouterThinkingEnabledBinding)
+            Toggle(L10n.text("Thinking enabled"), isOn: openRouterThinkingEnabledBinding)
                 .disabled(capabilities.mandatory)
             if capabilities.supportsMaxTokens {
-                TextField(L10n.format("%@: OpenRouter budget override", prefix), text: openRouterBudgetBinding)
+                TextField(L10n.text("Thinking budget"), text: openRouterBudgetBinding)
                     .keyboardType(.numberPad)
             }
             if !openRouterReasoningEfforts.isEmpty {
-                Picker(L10n.format("%@: OpenRouter effort override", prefix), selection: openRouterEffortBinding) {
+                Picker(L10n.text("Reasoning Effort"), selection: openRouterEffortBinding) {
                     Text(L10n.text("inherit")).tag("")
                     ForEach(openRouterReasoningEfforts, id: \.self) { effort in
                         Text(verbatim: effort).tag(effort)
                     }
                 }
             }
-            Toggle(L10n.format("%@: Exclude reasoning", prefix), isOn: openRouterExcludeBinding)
+            Toggle(L10n.text("Exclude reasoning"), isOn: openRouterExcludeBinding)
         } else {
             Text(L10n.format("%@: このモデルはOpenRouter Reasoning設定に対応していません。", prefix))
                 .font(.caption2)
@@ -115,23 +128,111 @@ struct DualModeOverridesForm: View {
 
     @ViewBuilder
     private var reasoningEffortControls: some View {
-        let enabledLabel = provider == "SUPERGROK"
-            ? L10n.format("%@: Reasoning enabled", prefix)
-            : L10n.format("%@: Codex reasoning enabled", prefix)
-        let effortLabel = provider == "SUPERGROK"
-            ? L10n.format("%@: Reasoning effort override", prefix)
-            : L10n.format("%@: Codex reasoning effort override", prefix)
+        let enabledLabel = L10n.text("Reasoning enabled")
+        let effortLabel = L10n.text("Reasoning Effort")
         Toggle(enabledLabel, isOn: thinkingEnabledBinding)
-        if provider == "SUPERGROK" {
-            Picker(effortLabel, selection: codexReasoningEffortBinding) {
-                Text(L10n.text("inherit")).tag("")
-                ForEach(["low", "medium", "high"], id: \.self) { effort in
-                    Text(effort).tag(effort)
-                }
+        if reasoningEffortOptions.isEmpty {
+            if provider == "CODEX_AUTH" {
+                Text(L10n.format("%@: ChatGPTのモデル一覧を取得すると推論Effortを選択できます", prefix))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         } else {
-            TextField(effortLabel, text: codexReasoningEffortBinding)
+            Picker(effortLabel, selection: reasoningEffortBinding) {
+                Text(L10n.text("inherit")).tag("")
+                if !currentReasoningEffort.isEmpty,
+                   !reasoningEffortOptions.contains(currentReasoningEffort) {
+                    Text(verbatim: unsupportedValueLabel(currentReasoningEffort)).tag(currentReasoningEffort)
+                }
+                ForEach(reasoningEffortOptions, id: \.self) { effort in
+                    Text(verbatim: effort).tag(effort)
+                }
+            }
         }
+    }
+
+    /// models.dev providers keep their reasoning effort in the same per-model
+    /// preference the provider settings and the chat composer already use.
+    @ViewBuilder
+    private func modelsDevReasoningControls(model catalogModel: CatalogModel) -> some View {
+        let savedEffort = modelsDevReasoningEffort
+        if catalogModel.shouldShowReasoningEffortPreference(savedEffort: savedEffort) {
+            ModelsDevReasoningEffortPicker(
+                model: catalogModel,
+                currentEffort: savedEffort,
+                onChange: { effort in
+                    guard let providerID = modelsDevProviderID else { return }
+                    viewModel.saveModelsDevReasoningEffort(
+                        providerID: providerID,
+                        modelID: catalogModel.id,
+                        effort: effort
+                    )
+                },
+                title: L10n.text("Reasoning Effort")
+            )
+            .id("\(provider)\u{0}\(catalogModel.id)")
+        }
+    }
+
+    private var modelsDevProviderID: String? {
+        ProviderReference(persistedID: provider).modelsDevID
+    }
+
+    private var modelsDevCatalogModel: CatalogModel? {
+        guard let providerID = modelsDevProviderID else { return nil }
+        return ReasoningEffortOptions.catalogModel(
+            providerID: providerID,
+            model: model,
+            catalogProviders: viewModel.modelsDevCatalogState.providers
+        )
+    }
+
+    private var modelsDevReasoningEffort: String {
+        guard let providerID = modelsDevProviderID else { return "" }
+        return viewModel.modelsDevReasoningEffort(providerID: providerID, modelID: model)
+    }
+
+    private var reasoningEffortOptions: [String] {
+        ReasoningEffortOptions.options(
+            provider: provider,
+            model: model,
+            codexModels: viewModel.codexModels,
+            catalogProviders: viewModel.modelsDevCatalogState.providers
+        )
+    }
+
+    private var currentReasoningEffort: String {
+        switch side {
+        case .a:
+            viewModel.settings.dualCodexReasoningEffortA?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? ""
+        case .b:
+            viewModel.settings.dualCodexReasoningEffortB?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? ""
+        }
+    }
+
+    private var thinkingLevelOptions: [String] {
+        GeminiModelUtils.getThinkingLevelOptions(model: model)
+    }
+
+    private var currentThinkingLevel: String {
+        switch side {
+        case .a:
+            viewModel.settings.dualThinkingLevelA?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? ""
+        case .b:
+            viewModel.settings.dualThinkingLevelB?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() ?? ""
+        }
+    }
+
+    private func unsupportedValueLabel(_ value: String) -> String {
+        L10n.format("%@（現在は非対応）", value)
     }
 
     private var inheritedThinkingEnabled: Bool {
@@ -250,27 +351,27 @@ struct DualModeOverridesForm: View {
         switch side {
         case .a:
             Binding(
-                get: { viewModel.settings.dualThinkingLevelA ?? "" },
+                get: { currentThinkingLevel },
                 set: { viewModel.settings.dualThinkingLevelA = SettingsStringHelpers.nilIfBlank($0) }
             )
         case .b:
             Binding(
-                get: { viewModel.settings.dualThinkingLevelB ?? "" },
+                get: { currentThinkingLevel },
                 set: { viewModel.settings.dualThinkingLevelB = SettingsStringHelpers.nilIfBlank($0) }
             )
         }
     }
 
-    private var codexReasoningEffortBinding: Binding<String> {
+    private var reasoningEffortBinding: Binding<String> {
         switch side {
         case .a:
             Binding(
-                get: { viewModel.settings.dualCodexReasoningEffortA ?? "" },
+                get: { currentReasoningEffort },
                 set: { viewModel.settings.dualCodexReasoningEffortA = SettingsStringHelpers.nilIfBlank($0) }
             )
         case .b:
             Binding(
-                get: { viewModel.settings.dualCodexReasoningEffortB ?? "" },
+                get: { currentReasoningEffort },
                 set: { viewModel.settings.dualCodexReasoningEffortB = SettingsStringHelpers.nilIfBlank($0) }
             )
         }
@@ -402,6 +503,9 @@ struct DualModeOverridesForm: View {
     }
 
     private func resetOverrides() {
+        if let providerID = modelsDevProviderID {
+            viewModel.saveModelsDevReasoningEffort(providerID: providerID, modelID: model, effort: "")
+        }
         switch side {
         case .a:
             viewModel.settings.dualOpenRouterThinkingEnabledA = nil

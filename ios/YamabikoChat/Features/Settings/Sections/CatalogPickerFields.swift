@@ -174,23 +174,26 @@ struct ModelsDevReasoningEffortPicker: View {
     let model: CatalogModel
     let currentEffort: String
     let onChange: (String) -> Void
+    let title: String?
 
     @State private var selection: String
 
     init(
         model: CatalogModel,
         currentEffort: String,
-        onChange: @escaping (String) -> Void
+        onChange: @escaping (String) -> Void,
+        title: String? = nil
     ) {
         self.model = model
         self.currentEffort = currentEffort
         self.onChange = onChange
+        self.title = title
         let normalized = currentEffort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         _selection = State(initialValue: normalized)
     }
 
     var body: some View {
-        Picker("Reasoning effort", selection: Binding(
+        Picker(selection: Binding(
             get: { selection },
             set: { value in
                 selection = value
@@ -199,11 +202,16 @@ struct ModelsDevReasoningEffortPicker: View {
         )) {
             Text("プロバイダー既定").tag("")
             if !selection.isEmpty, !model.supportedReasoningEfforts.contains(selection) {
-                Text("\(selection)（現在は非対応）").tag(selection)
+                Text(L10n.format("%@（現在は非対応）", selection)).tag(selection)
             }
             ForEach(model.supportedReasoningEfforts, id: \.self) { effort in
                 Text(effort).tag(effort)
             }
+        } label: {
+            Text(title ?? L10n.text("Reasoning Effort"))
+        }
+        .onChange(of: currentEffort) { _, value in
+            selection = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         }
     }
 }

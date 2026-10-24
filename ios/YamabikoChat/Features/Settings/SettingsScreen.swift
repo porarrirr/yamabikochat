@@ -444,10 +444,61 @@ struct SettingsDetailScreen: View {
 
     private var conversationCategoryContent: some View {
         Group {
-            systemPromptTabContent
+            Section {
+                NavigationLink {
+                    AMOLEDForm { systemPromptTabContent }
+                        .navigationTitle("システムプロンプト")
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    ConversationSettingsRow(
+                        title: "システムプロンプト",
+                        subtitle: "AIの話し方や役割を設定",
+                        symbol: "text.bubble",
+                        status: viewModel.settings.isSystemPromptEnabled ? "有効" : "無効"
+                    )
+                }
+                .accessibilityIdentifier("conversation-system-prompt")
+            } header: {
+                Text("AIへの指示")
+            }
+
+            Section {
+                NavigationLink {
+                    AMOLEDForm { dualTabContent }
+                        .listSectionSpacing(.compact)
+                        .navigationTitle(L10n.text("デュアルモード"))
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    ConversationSettingsRow(
+                        title: L10n.text("デュアルモード"),
+                        subtitle: "2つのモデルの回答を並べて比較",
+                        symbol: "rectangle.split.2x1",
+                        status: viewModel.settings.isDualModeEnabled ? "有効" : "無効"
+                    )
+                }
+                .accessibilityIdentifier("conversation-dual-mode")
+
+                NavigationLink {
+                    AMOLEDForm { AutoConversationSettingsSection(viewModel: viewModel) }
+                        .listSectionSpacing(.compact)
+                        .navigationTitle(L10n.text("自動会話"))
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    ConversationSettingsRow(
+                        title: L10n.text("自動会話"),
+                        subtitle: "2つのモデルが交互に会話",
+                        symbol: "bubble.left.and.bubble.right",
+                        status: viewModel.settings.isAutoConversationEnabled ? "有効" : "無効"
+                    )
+                }
+                .accessibilityIdentifier("conversation-auto-mode")
+            } header: {
+                Text("会話モード")
+            } footer: {
+                Text("デュアルモードと自動会話は、どちらか一方を利用できます。")
+            }
+
             SubagentSettingsSection(viewModel: viewModel)
-            dualTabContent
-            AutoConversationSettingsSection(viewModel: viewModel)
         }
     }
 
@@ -1765,7 +1816,7 @@ struct SettingsDetailScreen: View {
     }
 
     private var superGrokReasoningEffortOptions: [String] {
-        ["low", "medium", "high"]
+        ReasoningEffortOptions.superGrok
     }
 
     private var themeModeOptions: [AppearanceOption] {
