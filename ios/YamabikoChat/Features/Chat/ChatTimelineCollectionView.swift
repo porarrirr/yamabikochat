@@ -113,7 +113,7 @@ final class ChatTimelineViewController: UIViewController, UICollectionViewDelega
         // The timeline sits behind the chat header, so its insets come from the
         // workspace layout instead of UIKit's safe area adjustment.
         collectionView.contentInsetAdjustmentBehavior = .never
-        collectionView.keyboardDismissMode = .interactive
+        collectionView.keyboardDismissMode = .none
         collectionView.delegate = self
         // Streaming rows are measured explicitly in completePendingRowMeasurement().
         // Leaving this enabled makes invalidateIntrinsicContentSize() start a second,

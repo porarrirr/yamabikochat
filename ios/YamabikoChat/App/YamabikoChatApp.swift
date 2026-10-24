@@ -6,6 +6,8 @@ struct YamabikoChatApp: App {
     var body: some Scene {
         WindowGroup {
             AppBootstrapView()
+                .background(KeyboardDismissalHost())
+                .scrollDismissesKeyboard(.never)
         }
     }
 }

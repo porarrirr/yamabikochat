@@ -296,7 +296,7 @@ struct ChatComposerTextView: UIViewRepresentable {
         }
     }
 
-    final class ComposerTextView: UITextView {
+    final class ComposerTextView: UITextView, KeepsKeyboardVisible {
         let placeholderLabel = UILabel()
         var onDeleteAtBeginning: (() -> Void)?
 
@@ -308,7 +308,7 @@ struct ChatComposerTextView: UIViewRepresentable {
             textContainerInset = .zero
             self.textContainer.lineFragmentPadding = 0
             isScrollEnabled = true
-            keyboardDismissMode = .interactive
+            keyboardDismissMode = .none
             placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
             placeholderLabel.font = .systemFont(ofSize: 16)
             placeholderLabel.textColor = .amoledPlaceholderText

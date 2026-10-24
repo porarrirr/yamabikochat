@@ -504,7 +504,7 @@ struct GenUIRichWebView: UIViewRepresentable {
             webView.scrollView.backgroundColor = .clear
             webView.scrollView.isScrollEnabled = false
             webView.scrollView.bounces = false
-            webView.scrollView.keyboardDismissMode = .interactive
+            webView.scrollView.keyboardDismissMode = .none
             webView.scrollView.contentInsetAdjustmentBehavior = .never
             webView.navigationDelegate = self
             webView.uiDelegate = self
