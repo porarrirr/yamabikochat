@@ -657,3 +657,7 @@
 "個別設定をリセット" = "Réinitialiser les réglages du modèle";
 
 "Thinking enabled" = "Activer la réflexion";
+
+"プロバイダー設定（%@）" = "Réglages du fournisseur (%@)";
+"モデルの既定値" = "Valeur par défaut du modèle";
+"個別に指定しない項目は、プリセットの選択に関係なくプロバイダー設定を使用します。" = "Les options sans réglage individuel utilisent les réglages du fournisseur, quel que soit le préréglage sélectionné.";

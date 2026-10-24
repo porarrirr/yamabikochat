@@ -125,6 +125,43 @@ final class ProviderRequestSettingsResolverTests: XCTestCase {
         XCTAssertFalse(resolved.tools.contains { $0.type == "google_search" })
     }
 
+    func testAutoThinkingLevelUsesProviderSettingsUntilIndividuallySelected() async throws {
+        let resolver = makeResolver()
+        var settings = AppSettings()
+        settings.geminiThinkingEnabled = true
+        settings.geminiThinkingLevel = "low"
+
+        for context in [AppSettings.ReasoningContext.autoA, .autoB] {
+            let levelKeyPath = context == .autoA
+                ? \AppSettings.autoThinkingLevelA : \AppSettings.autoThinkingLevelB
+            XCTAssertNil(settings[keyPath: levelKeyPath])
+
+            func resolvedLevel() async throws -> String? {
+                let resolved = try await resolver.resolve(
+                    settings: settings,
+                    provider: "GEMINI",
+                    model: "gemini-3-flash-preview",
+                    context: context
+                )
+                return resolved.metadata["geminiThinkingLevel"]
+            }
+
+            let providerLevel = try await resolvedLevel()
+            XCTAssertEqual(providerLevel, "low")
+
+            settings[keyPath: levelKeyPath] = "high"
+            let individualLevel = try await resolvedLevel()
+            XCTAssertEqual(individualLevel, "high")
+            XCTAssertEqual(settings.geminiThinkingLevel, "low")
+
+            settings[keyPath: levelKeyPath] = nil
+            settings.geminiThinkingLevel = "medium"
+            let resetLevel = try await resolvedLevel()
+            XCTAssertEqual(resetLevel, "medium")
+            settings.geminiThinkingLevel = "low"
+        }
+    }
+
     func testAutoThinkingLevelOverrideIsResolvedForGeminiLevelModels() async throws {
         let resolver = makeResolver()
         var settings = AppSettings()

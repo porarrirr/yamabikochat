@@ -32,6 +32,13 @@ struct AutoConversationOverridesForm: View {
         Group {
             providerSpecificControls
 
+            if modelsDevProviderID == nil,
+               ["GEMINI", "OPENROUTER", "CODEX_AUTH", "SUPERGROK"].contains(provider) {
+                Text(L10n.text("個別に指定しない項目は、プリセットの選択に関係なくプロバイダー設定を使用します。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Button(L10n.text("個別設定をリセット")) {
                 resetOverrides()
             }
@@ -62,7 +69,7 @@ struct AutoConversationOverridesForm: View {
         Toggle(L10n.text("Thinking enabled"), isOn: thinkingEnabledBinding)
         if GeminiModelUtils.isThinkingLevelSupported(model: model) {
             Picker(L10n.text("Thinking level"), selection: thinkingLevelBinding) {
-                Text(L10n.text("inherit")).tag("")
+                Text(verbatim: providerSettingLabel(providerThinkingLevel)).tag("")
                 if !currentThinkingLevel.isEmpty,
                    !thinkingLevelOptions.contains(currentThinkingLevel) {
                     Text(verbatim: unsupportedValueLabel(currentThinkingLevel)).tag(currentThinkingLevel)
@@ -85,7 +92,7 @@ struct AutoConversationOverridesForm: View {
     private var openRouterControls: some View {
         if let capabilities = openRouterReasoningCapabilities {
             Picker(L10n.text("Reasoning mode"), selection: openRouterReasoningModeBinding) {
-                Text(L10n.text("inherit")).tag("inherit")
+                Text(verbatim: providerSettingLabel(settings.openRouterReasoningMode)).tag("inherit")
                 ForEach(openRouterReasoningModes, id: \.self) { mode in
                     Text(verbatim: mode).tag(mode)
                 }
@@ -98,7 +105,7 @@ struct AutoConversationOverridesForm: View {
             }
             if !openRouterReasoningEfforts.isEmpty {
                 Picker(L10n.text("Reasoning Effort"), selection: openRouterEffortBinding) {
-                    Text(L10n.text("inherit")).tag("")
+                    Text(verbatim: providerSettingLabel(settings.openRouterReasoningEffort)).tag("")
                     ForEach(openRouterReasoningEfforts, id: \.self) { effort in
                         Text(verbatim: effort).tag(effort)
                     }
@@ -137,7 +144,7 @@ struct AutoConversationOverridesForm: View {
             }
         } else {
             Picker(effortLabel, selection: reasoningEffortBinding) {
-                Text(L10n.text("inherit")).tag("")
+                Text(verbatim: providerSettingLabel(providerReasoningEffort)).tag("")
                 if !currentReasoningEffort.isEmpty,
                    !reasoningEffortOptions.contains(currentReasoningEffort) {
                     Text(verbatim: unsupportedValueLabel(currentReasoningEffort)).tag(currentReasoningEffort)
@@ -197,6 +204,23 @@ struct AutoConversationOverridesForm: View {
         default:
             []
         }
+    }
+
+    private var providerThinkingLevel: String {
+        GeminiModelUtils.normalizeThinkingLevel(model: model, level: settings.geminiThinkingLevel)
+            ?? GeminiModelUtils.getDefaultThinkingLevel(model: model)
+    }
+
+    private var providerReasoningEffort: String {
+        let effort = provider == "CODEX_AUTH"
+            ? settings.codexReasoningEffort
+            : settings.superGrokReasoningEffort
+        return SettingsStringHelpers.nilIfBlank(effort) ?? "medium"
+    }
+
+    private func providerSettingLabel(_ value: String) -> String {
+        let detail = SettingsStringHelpers.nilIfBlank(value) ?? L10n.text("モデルの既定値")
+        return L10n.format("プロバイダー設定（%@）", detail)
     }
 
     private var currentReasoningEffort: String {

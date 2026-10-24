@@ -708,3 +708,7 @@
 "個別設定をリセット" = "Reset model overrides";
 
 "Thinking enabled" = "Enable thinking";
+
+"プロバイダー設定（%@）" = "Provider settings (%@)";
+"モデルの既定値" = "Model default";
+"個別に指定しない項目は、プリセットの選択に関係なくプロバイダー設定を使用します。" = "Options without an individual override use provider settings, regardless of preset selection.";
